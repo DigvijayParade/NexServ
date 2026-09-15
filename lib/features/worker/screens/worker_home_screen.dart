@@ -208,6 +208,98 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> with SingleTickerPr
                       ),
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  // Performance Metrics
+                  Text(
+                    isHindi ? 'प्रदर्शन मेट्रिक्स' : 'Performance Metrics',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Card(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              children: const [
+                                Icon(Icons.star, color: Colors.amber, size: 32),
+                                SizedBox(height: 8),
+                                Text('4.8/5.0', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                Text('Rating', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Card(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              children: const [
+                                Icon(Icons.check_circle_outline, color: Colors.blue, size: 32),
+                                SizedBox(height: 8),
+                                Text('92%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                Text('Acceptance', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Upcoming Scheduled Jobs
+                  Text(
+                    isHindi ? 'आगामी कार्य' : 'Upcoming Scheduled Jobs',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: ListTile(
+                      leading: const CircleAvatar(backgroundColor: Colors.orange, child: Icon(Icons.calendar_month, color: Colors.white)),
+                      title: const Text('Plumbing - Pipe Leakage'),
+                      subtitle: const Text('Today, 4:00 PM • Sector 22, Noida'),
+                      trailing: const Text('₹350', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Today's Completed Jobs
+                  Text(
+                    isHindi ? 'आज के पूरे किए गए कार्य' : "Today's Completed Jobs",
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.check_circle, color: Colors.green),
+                          title: const Text('Electrician - Fan Repair'),
+                          subtitle: const Text('Completed at 10:15 AM'),
+                          trailing: const Text('+₹299', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: const Icon(Icons.check_circle, color: Colors.green),
+                          title: const Text('Electrician - Switchboard'),
+                          subtitle: const Text('Completed at 11:45 AM'),
+                          trailing: const Text('+₹199', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
                 ],
 
                 const Spacer(),

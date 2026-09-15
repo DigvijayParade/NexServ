@@ -23,6 +23,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
   String? _selectedDate;
   String? _selectedTime;
   final _addressController = TextEditingController();
+  bool _showStep1Error = false;
   bool _showStep2Error = false;
 
   // Step 4 State
@@ -53,12 +54,13 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
   void _nextStep() {
     if (_currentStep == 1) {
       if (_selectedSubService == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a sub-service')),
-        );
+        setState(() => _showStep1Error = true);
         return;
       }
-      setState(() => _currentStep = 2);
+      setState(() {
+        _showStep1Error = false;
+        _currentStep = 2;
+      });
     } else if (_currentStep == 2) {
       if ((_serviceMode == 'Scheduled' && (_selectedDate == null || _selectedTime == null)) ||
           _addressController.text.trim().isEmpty) {
@@ -184,19 +186,36 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
         const Text('Select Sub-Service', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         ..._getSubServices().map((service) {
-          return RadioListTile<String>(
-            title: Text(service),
-            value: service,
-            // ignore: deprecated_member_use
-            groupValue: _selectedSubService,
-            // ignore: deprecated_member_use
-            onChanged: (val) {
-              setState(() {
-                _selectedSubService = val;
-              });
-            },
+          final isSelected = _selectedSubService == service;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.green.shade50 : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected ? Colors.green : Colors.grey.shade300,
+              ),
+            ),
+            child: RadioListTile<String>(
+              title: Text(service),
+              value: service,
+              groupValue: _selectedSubService,
+              activeColor: Colors.green,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onChanged: (val) {
+                setState(() {
+                  _selectedSubService = val;
+                  _showStep1Error = false; // clear error when selected
+                });
+              },
+            ),
           );
         }),
+        if (_showStep1Error)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 16.0),
+            child: Text('Please select a sub-service to continue.', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
         const SizedBox(height: 16),
         TextField(
           controller: _issueController,
@@ -207,7 +226,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
               icon: const Icon(Icons.mic),
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Listening... Say your service requirement.')),
+                  const SnackBar(content: Text('Listening...')),
                 );
               },
             ),

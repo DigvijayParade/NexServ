@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import 'core/state/app_state.dart';
 import 'core/routes/app_routes.dart';
-import 'core/widgets/demo_role_switcher.dart';
 
 void main() {
   ErrorWidget.builder = (FlutterErrorDetails details) {
@@ -63,7 +62,7 @@ class CoopGigApp extends StatelessWidget {
       initialRoute: AppRoutes.auth,
       onGenerateRoute: AppRoutes.generateRoute,
       builder: (context, child) {
-        return DemoRoleSwitcher(child: child!);
+        return child!;
       },
     );
   }

@@ -23,7 +23,18 @@ class AppState extends ChangeNotifier {
   }
 
   void toggleLanguage() {
-    _locale = _locale == 'English' ? 'Hindi' : 'English';
+    if (_locale == 'English') {
+      _locale = 'Hindi';
+    } else if (_locale == 'Hindi') {
+      _locale = 'Marathi';
+    } else {
+      _locale = 'English';
+    }
+    notifyListeners();
+  }
+
+  void setLanguage(String lang) {
+    _locale = lang;
     notifyListeners();
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/state/app_state.dart';
+import '../../../core/utils/localization.dart';
 import '../widgets/booking_bottom_sheet.dart';
 
 class CustomerHomeScreen extends StatefulWidget {
@@ -12,12 +13,12 @@ class CustomerHomeScreen extends StatefulWidget {
 
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   final List<Map<String, dynamic>> _categories = [
-    {'name': 'Electrician', 'name_hi': 'बिजली मिस्त्री', 'icon': Icons.bolt, 'color': Colors.amber.shade700},
-    {'name': 'Plumber', 'name_hi': 'प्लंबर', 'icon': Icons.water_drop, 'color': Colors.blue.shade600},
-    {'name': 'Carpenter', 'name_hi': 'बढ़ई', 'icon': Icons.handyman, 'color': Colors.brown.shade500},
-    {'name': 'Cleaning', 'name_hi': 'सफाई', 'icon': Icons.cleaning_services, 'color': Colors.cyan.shade600},
-    {'name': 'Repair', 'name_hi': 'मरम्मत', 'icon': Icons.build, 'color': Colors.deepOrange.shade500},
-    {'name': 'More', 'name_hi': 'अन्य', 'icon': Icons.more_horiz, 'color': Colors.grey.shade700},
+    {'name': 'Electrician', 'name_hi': 'बिजली मिस्त्री', 'name_mr': 'इलेक्ट्रिशियन', 'icon': Icons.bolt, 'color': Colors.amber.shade700},
+    {'name': 'Plumber', 'name_hi': 'प्लंबर', 'name_mr': 'प्लंबर', 'icon': Icons.water_drop, 'color': Colors.blue.shade600},
+    {'name': 'Carpenter', 'name_hi': 'बढ़ई', 'name_mr': 'सुतार', 'icon': Icons.handyman, 'color': Colors.brown.shade500},
+    {'name': 'Cleaning', 'name_hi': 'सफाई', 'name_mr': 'स्वच्छता', 'icon': Icons.cleaning_services, 'color': Colors.cyan.shade600},
+    {'name': 'Repair', 'name_hi': 'मरम्मत', 'name_mr': 'दुरुस्ती', 'icon': Icons.build, 'color': Colors.deepOrange.shade500},
+    {'name': 'More', 'name_hi': 'अन्य', 'name_mr': 'इतर', 'icon': Icons.more_horiz, 'color': Colors.grey.shade700},
   ];
 
   void _openBookingSheet(String categoryName) {
@@ -32,7 +33,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
-    final bool isHindi = appState.locale == 'Hindi';
+    final String loc = appState.locale;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -85,38 +86,50 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     bottom: 24,
                     left: 16,
                     right: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          )
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.search, size: 28, color: Colors.black87),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              isHindi ? 'आपको कौन सी सेवा चाहिए?' : 'What service do you need?',
-                              style: const TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w500),
+                    child: InkWell(
+                      onTap: () {
+                        showSearch(context: context, delegate: CustomSearchDelegate());
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            )
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.search, size: 28, color: Colors.black87),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                AppLocalizations.tr(loc, 'What service do you need?', 'आपको कौन सी सेवा चाहिए?', 'तुम्हाला कोणती सेवा हवी आहे?'),
+                                style: const TextStyle(fontSize: 16, color: Colors.black54, fontWeight: FontWeight.w500),
+                              ),
                             ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              shape: BoxShape.circle,
+                            InkWell(
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Voice Search simulator active.')),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.mic, color: Colors.black87),
+                              ),
                             ),
-                            child: const Icon(Icons.mic, color: Colors.black87),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -157,11 +170,25 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: CircleAvatar(
                   backgroundColor: Colors.white.withValues(alpha: 0.9),
-                  child: IconButton(
+                  child: PopupMenuButton<String>(
                     icon: const Icon(Icons.language, color: Colors.black),
-                    onPressed: () {
-                      appState.toggleLanguage();
+                    onSelected: (String value) {
+                      appState.setLanguage(value);
                     },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'English',
+                        child: Text('English'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'Hindi',
+                        child: Text('हिंदी (Hindi)'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'Marathi',
+                        child: Text('मराठी (Marathi)'),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -206,12 +233,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                isHindi ? 'सुपरफास्ट सेवा' : 'Superfast Service',
+                                AppLocalizations.tr(loc, 'Superfast Service', 'सुपरफास्ट सेवा', 'सुपरफास्ट सेवा'),
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                isHindi ? 'सहकारी कर्मचारी 15 मिनट में' : 'Co-op Workers in 15 mins',
+                                AppLocalizations.tr(loc, 'Co-op Workers in 15 mins', 'सहकारी कर्मचारी 15 मिनट में', 'सहकारी कामगार 15 मिनिटांत'),
                                 style: const TextStyle(color: Colors.white70, fontSize: 14),
                               ),
                             ],
@@ -228,11 +255,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        isHindi ? 'सुझाव' : 'Suggestions',
+                        AppLocalizations.tr(loc, 'Suggestions', 'सुझाव', 'सूचना'),
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       Text(
-                        isHindi ? 'सभी देखें' : 'See All',
+                        AppLocalizations.tr(loc, 'See All', 'सभी देखें', 'सर्व पहा'),
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
                       ),
                     ],
@@ -266,7 +293,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
                                 child: Text(
-                                  isHindi ? cat['name_hi'] : cat['name'],
+                                  AppLocalizations.tr(loc, cat['name'], cat['name_hi'], cat['name_mr']),
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
                                     fontSize: 13,
@@ -288,7 +315,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   
                   // Active Bookings / Recent Activity
                   Text(
-                    isHindi ? 'आपकी गतिविधि' : 'Your Activity',
+                    AppLocalizations.tr(loc, 'Your Activity', 'आपकी गतिविधि', 'तुमची क्रियाकलाप'),
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
                   ),
                   const SizedBox(height: 16),
@@ -320,6 +347,74 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class CustomSearchDelegate extends SearchDelegate {
+  final List<String> searchTerms = [
+    'Electrician',
+    'Plumber',
+    'Carpenter',
+    'AC Repair',
+    'House Cleaning',
+    'Washing Machine Repair',
+    'Pest Control'
+  ];
+
+  @override
+  List<Widget>? buildActions(BuildContext context) {
+    return [
+      IconButton(
+        icon: const Icon(Icons.clear),
+        onPressed: () {
+          query = '';
+        },
+      )
+    ];
+  }
+
+  @override
+  Widget? buildLeading(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back),
+      onPressed: () {
+        close(context, null);
+      },
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    return Center(
+      child: Text(
+        'Searching for "$query"...',
+        style: const TextStyle(fontSize: 18),
+      ),
+    );
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    List<String> matchQuery = [];
+    for (var term in searchTerms) {
+      if (term.toLowerCase().contains(query.toLowerCase())) {
+        matchQuery.add(term);
+      }
+    }
+    return ListView.builder(
+      itemCount: matchQuery.length,
+      itemBuilder: (context, index) {
+        var result = matchQuery[index];
+        return ListTile(
+          leading: const Icon(Icons.search),
+          title: Text(result),
+          onTap: () {
+            query = result;
+            showResults(context);
+          },
+        );
+      },
     );
   }
 }

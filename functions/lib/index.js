@@ -42,7 +42,22 @@ const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-admin/firestore");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
-(0, app_1.initializeApp)();
+// Initialize Firebase Admin with Service Account if present (for Render/External servers)
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        (0, app_1.initializeApp)({
+            credential: (0, app_1.cert)(serviceAccount)
+        });
+    }
+    catch (e) {
+        console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT env var, falling back to default:", e);
+        (0, app_1.initializeApp)();
+    }
+}
+else {
+    (0, app_1.initializeApp)();
+}
 const db = (0, firestore_1.getFirestore)();
 const auth_1 = require("./routes/auth");
 const jobs_1 = require("./routes/jobs");
@@ -61,5 +76,9 @@ app.use('/api/jobs', jobs_1.jobsRouter);
 app.use('/api/workers', workers_1.workersRouter);
 app.use('/api/admin', admin_1.adminRouter);
 app.use(middlewares_1.errorHandler);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`NexServ backend API server running on port ${PORT}`);
+});
 exports.api = functions.https.onRequest(app);
 //# sourceMappingURL=index.js.map

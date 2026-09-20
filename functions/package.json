@@ -1,0 +1,38 @@
+{
+  "name": "functions",
+  "version": "1.0.0",
+  "description": "",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "emulators": "set \"JAVA_HOME=D:\\CoopGigApp\\.jdk21\\jdk-21.0.12.1+1\" && firebase emulators:start --import=./emulator_data --export-on-exit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.0",
+    "express": "^5.2.1",
+    "firebase-admin": "^14.4.0",
+    "firebase-functions": "^7.4.0",
+    "jsonwebtoken": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.6.1",
+    "firebase-tools": "^13.11.2",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": "20"
+  }
+}

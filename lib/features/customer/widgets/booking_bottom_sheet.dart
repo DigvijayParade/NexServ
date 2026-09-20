@@ -1,5 +1,8 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/state/app_state.dart';
 import 'ai_matching_overlay.dart';
 
@@ -15,7 +18,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
   int _currentStep = 1;
 
   // Step 1 State
-  String _serviceMode = 'Instant'; // Instant or Scheduled
+  String _serviceMode = 'Instant';
   String? _selectedSubService;
   final _issueController = TextEditingController();
 
@@ -32,22 +35,60 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
   final List<String> _dates = ['Today', 'Tomorrow', 'Select Custom Date'];
   final List<String> _times = ['09:00 AM', '11:30 AM', '02:00 PM', '05:00 PM'];
 
+  String _tr(String text) {
+    final appState = Provider.of<AppState>(context, listen: true);
+    String loc = appState.locale;
+    if (loc == 'English' || loc == 'en') return text;
+    if (loc == 'Hindi') loc = 'hi';
+    if (loc == 'Marathi') loc = 'mr';
+    
+    final translations = {
+      'Book ': {'hi': 'बुक करें ', 'mr': 'बुक करा '},
+      'Electrician': {'hi': 'इलेक्ट्रीशियन', 'mr': 'इलेक्ट्रिशियन'},
+      'Plumber': {'hi': 'प्लंबर', 'mr': 'प्लंबर'},
+      'Carpenter': {'hi': 'बढ़ई', 'mr': 'सुतार'},
+      'Cleaning': {'hi': 'सफाई', 'mr': 'स्वच्छता'},
+      'Repair': {'hi': 'मरम्मत', 'mr': 'दुरुस्ती'},
+      'Service Mode': {'hi': 'सेवा मोड', 'mr': 'सेवा मोड'},
+      'Instant AI Dispatch (15 Mins)': {'hi': 'त्वरित AI डिस्पैच (15 मिनट)', 'mr': 'त्वरित AI डिस्पॅच (15 मिनिटे)'},
+      'Schedule for Later': {'hi': 'बाद के लिए शेड्यूल करें', 'mr': 'नंतरसाठी शेड्यूल करा'},
+      'Select Sub-Service': {'hi': 'उप-सेवा चुनें', 'mr': 'उप-सेवा निवडा'},
+      'Describe your issue (optional)': {'hi': 'अपनी समस्या बताएं (वैकल्पिक)', 'mr': 'तुमच्या समस्येचे वर्णन करा (पर्यायी)'},
+      'Continue to Schedule': {'hi': 'शेड्यूल जारी रखें', 'mr': 'शेड्यूल सुरू ठेवा'},
+      'Service Address': {'hi': 'सेवा का पता', 'mr': 'सेवा पत्ता'},
+      'Flat / House No / Landmark': {'hi': 'फ्लैट / मकान नंबर / लैंडमार्क', 'mr': 'फ्लॅट / घर क्र. / खूण'},
+      'Select Date': {'hi': 'तारीख चुनें', 'mr': 'तारीख निवडा'},
+      'Select Time Slot': {'hi': 'समय चुनें', 'mr': 'वेळ निवडा'},
+    };
+    
+    if (text.startsWith('Book ')) {
+      final cat = text.replaceAll('Book ', '');
+      final translatedCat = translations[cat]?[loc] ?? cat;
+      final translatedBook = translations['Book ']?[loc] ?? 'Book ';
+      return loc == 'hi' ? '$translatedCat $translatedBook' : '$translatedCat $translatedBook';
+    }
+    
+    return translations[text]?[loc] ?? text;
+  }
+
   List<String> _getSubServices() {
     switch (widget.categoryName) {
       case 'Electrician':
-        return ['Fan Repair - ₹299', 'Switchboard Fixing - ₹199', 'Full Wiring Inspection - ₹499'];
+        return ['Fan Repair - ₹1299', 'Switchboard Fixing - ₹1199', 'Full Wiring Inspection - ₹1499'];
       case 'Plumber':
-        return ['Leakage Fix - ₹249', 'Pipe Replacement - ₹399', 'Tap Fitting - ₹149'];
+        return ['Leakage Fix - ₹1249', 'Pipe Replacement - ₹1399', 'Tap Fitting - ₹1149'];
       case 'Carpenter':
-        return ['Furniture Assembly - ₹499', 'Door Hinge Fix - ₹199', 'Custom Woodwork - ₹999'];
-      case 'Cleaning':
+        return ['Furniture Assembly - ₹1499', 'Door Hinge Fix - ₹1199', 'Custom Woodwork - ₹1999'];
+              case 'Painter':
+          return ['Wall Painting - ₹2999', 'Wood Polishing - ₹1499', 'Texture Painting - ₹3999'];
+        case 'Cleaning':
       case 'Home & Community Cleaner':
-        return ['Deep Cleaning - ₹999', 'Sofa Dry Cleaning - ₹499', 'Kitchen Cleaning - ₹599'];
+        return ['Deep Cleaning - ₹1999', 'Sofa Dry Cleaning - ₹1499', 'Kitchen Cleaning - ₹1599'];
       case 'Repair':
       case 'Appliance Repair Specialist':
-        return ['AC Servicing - ₹599', 'Washing Machine Repair - ₹499', 'Refrigerator Check - ₹399'];
+        return ['AC Servicing - ₹1599', 'Washing Machine Repair - ₹1499', 'Refrigerator Check - ₹1399'];
       default:
-        return ['General Service - ₹299'];
+        return ['General Service - ₹1299'];
     }
   }
 
@@ -69,22 +110,53 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
       }
       setState(() {
         _showStep2Error = false;
-        _currentStep = 3;
       });
-      _startAIMatching();
+      _startBackendJobCreation();
     } else if (_currentStep == 4) {
-      Provider.of<AppState>(context, listen: false).addBooking();
-      Navigator.pop(context); // Close bottom sheet
-      Navigator.pushNamed(context, '/liveTracking');
+      Navigator.pop(context);
     }
   }
 
-  void _startAIMatching() async {
-    await Future.delayed(const Duration(seconds: 6));
-    if (mounted) {
-      setState(() {
-        _currentStep = 4;
+  void _startBackendJobCreation() async {
+    setState(() {
+      _currentStep = 3;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      
+      final parts = _selectedSubService!.split('-');
+      final rateStr = parts.last.replaceAll('₹', '').trim();
+      
+      // Generate 4-digit OTP
+      final otp = (1000 + Random().nextInt(9000)).toString();
+      
+      await FirebaseFirestore.instance.collection('jobs').add({
+        'customer_id': user.uid,
+        'service_category': widget.categoryName,
+        'service_type': _selectedSubService,
+        'service_rate': double.tryParse(rateStr) ?? 299.0,
+        'status': 'searching',
+        'otp': otp,
+        'created_at': FieldValue.serverTimestamp(),
+        'location': const GeoPoint(28.6304, 77.2177)
       });
+      
+      // Wait for AI Match overlay animation to finish
+      await Future.delayed(const Duration(seconds: 4));
+
+      if (mounted) {
+        setState(() {
+          _currentStep = 4;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job created! Worker matched!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() { _currentStep = 2; });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
@@ -113,7 +185,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Book ${widget.categoryName}',
+            _tr('Book ${widget.categoryName}'),
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
@@ -128,14 +200,14 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
             ElevatedButton(
               onPressed: _nextStep,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black, // Uber-style black button
+                backgroundColor: Colors.black,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 18),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: Text(
                 _currentStep == 1
-                    ? 'Continue to Schedule'
+                    ? _tr('Continue to Schedule')
                     : _currentStep == 2
                         ? 'Find Cooperative Worker'
                         : 'Confirm & Book Service',
@@ -168,12 +240,12 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Service Mode', style: TextStyle(fontWeight: FontWeight.bold)),
+        Text(_tr('Service Mode'), style: const TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'Instant', label: Text('Instant AI Dispatch (15 Mins)')),
-            ButtonSegment(value: 'Scheduled', label: Text('Schedule for Later')),
+          segments: [
+            ButtonSegment(value: 'Instant', label: Text(_tr('Instant AI Dispatch (15 Mins)'))),
+            ButtonSegment(value: 'Scheduled', label: Text(_tr('Schedule for Later'))),
           ],
           selected: {_serviceMode},
           onSelectionChanged: (val) {
@@ -182,30 +254,27 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
             });
           },
         ),
-        const SizedBox(height: 24),
-        const Text('Select Sub-Service', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        Text(_tr('Select Sub-Service'), style: const TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        ..._getSubServices().map((service) {
-          final isSelected = _selectedSubService == service;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              color: isSelected ? Colors.green.shade50 : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSelected ? Colors.green : Colors.grey.shade300,
-              ),
-            ),
+        ..._getSubServices().map((sub) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
             child: RadioListTile<String>(
-              title: Text(service),
-              value: service,
+              title: Text(sub),
+              value: sub,
               groupValue: _selectedSubService,
               activeColor: Colors.green,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: _showStep1Error ? Colors.red : Colors.grey.shade300,
+                ),
+              ),
               onChanged: (val) {
                 setState(() {
                   _selectedSubService = val;
-                  _showStep1Error = false; // clear error when selected
+                  _showStep1Error = false;
                 });
               },
             ),
@@ -220,8 +289,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
         TextField(
           controller: _issueController,
           decoration: InputDecoration(
-            labelText: 'Describe your issue (optional)',
-            hintText: 'e.g., main switchboard sparking',
+            labelText: _tr('Describe your issue (optional)'),
             suffixIcon: IconButton(
               icon: const Icon(Icons.mic),
               onPressed: () {
@@ -243,7 +311,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (_serviceMode == 'Scheduled') ...[
-          const Text('Select Date', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(_tr('Select Date'), style: const TextStyle(fontWeight: FontWeight.bold)),
           Wrap(
             spacing: 8,
             children: _dates.map((date) {
@@ -257,7 +325,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
             }).toList(),
           ),
           const SizedBox(height: 16),
-          const Text('Select Time Slot', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(_tr('Select Time Slot'), style: const TextStyle(fontWeight: FontWeight.bold)),
           Wrap(
             spacing: 8,
             children: _times.map((time) {
@@ -272,12 +340,12 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
           ),
           const SizedBox(height: 24),
         ],
-        const Text('Service Address', style: TextStyle(fontWeight: FontWeight.bold)),
+        Text(_tr('Service Address'), style: const TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         TextField(
           controller: _addressController,
           decoration: InputDecoration(
-            labelText: 'Flat / House No / Landmark',
+            labelText: _tr('Flat / House No / Landmark'),
             border: const OutlineInputBorder(),
             errorText: _showStep2Error && _addressController.text.trim().isEmpty
                 ? 'Address is required'
@@ -317,7 +385,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
                           Text('Ramesh Kumar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          Text('4.9 ★ (120+ jobs)'),
+                          Text('4.9 ⭐ (120+ jobs)'),
                           SizedBox(height: 4),
                           Text('1.4 km away • Arriving in 15 mins', style: TextStyle(color: Colors.grey)),
                         ],
@@ -371,9 +439,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
           return RadioListTile<String>(
             title: Text(method),
             value: method,
-            // ignore: deprecated_member_use
             groupValue: _paymentMethod,
-            // ignore: deprecated_member_use
             onChanged: (val) {
               setState(() {
                 _paymentMethod = val!;
@@ -391,7 +457,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Base Fare'),
-                  Text(_selectedSubService?.split('-').last.trim() ?? '₹299'),
+                  Text(_selectedSubService?.split('-').last.trim() ?? '₹1299'),
                 ],
               ),
               const SizedBox(height: 8),
@@ -399,7 +465,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: const [
                   Text('Service Charge'),
-                  Text('₹49'),
+                  Text('₹149'),
                 ],
               ),
               const Divider(),

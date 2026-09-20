@@ -43,10 +43,22 @@
 					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
 					<key>UISceneStoryboardFile</key>
 					<string>Main</string>
-				</dict>
+					<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app requires access to your location to find nearby jobs.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app requires access to your location to find nearby jobs.</string>
+</dict>
 			</array>
-		</dict>
-	</dict>
+			<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app requires access to your location to find nearby jobs.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app requires access to your location to find nearby jobs.</string>
+</dict>
+		<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app requires access to your location to find nearby jobs.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app requires access to your location to find nearby jobs.</string>
+</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -66,5 +78,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app requires access to your location to find nearby jobs.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app requires access to your location to find nearby jobs.</string>
 </dict>
 </plist>

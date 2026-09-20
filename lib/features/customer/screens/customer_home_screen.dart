@@ -1,5 +1,8 @@
+import '../../profile/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/state/app_state.dart';
 import '../../../core/utils/localization.dart';
 import '../widgets/booking_bottom_sheet.dart';
@@ -18,7 +21,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     {'name': 'Carpenter', 'name_hi': 'बढ़ई', 'name_mr': 'सुतार', 'icon': Icons.handyman, 'color': Colors.brown.shade500},
     {'name': 'Cleaning', 'name_hi': 'सफाई', 'name_mr': 'स्वच्छता', 'icon': Icons.cleaning_services, 'color': Colors.cyan.shade600},
     {'name': 'Repair', 'name_hi': 'मरम्मत', 'name_mr': 'दुरुस्ती', 'icon': Icons.build, 'color': Colors.deepOrange.shade500},
-    {'name': 'More', 'name_hi': 'अन्य', 'name_mr': 'इतर', 'icon': Icons.more_horiz, 'color': Colors.grey.shade700},
+    {'name': 'Painter', 'name_hi': 'पेंटर', 'name_mr': 'रंगारी', 'icon': Icons.format_paint, 'color': Colors.purple.shade600},
   ];
 
   void _openBookingSheet(String categoryName) {
@@ -146,26 +149,60 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       color: Colors.white.withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.near_me, size: 16, color: Colors.black),
-                        SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            'Connaught Place, Delhi',
-                            style: TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis,
+                    child: InkWell(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Live location tracking is mocked for this demo app.')),
+                        );
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.near_me, size: 16, color: Colors.black),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              appState.userLocation,
+                              style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                        Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.black),
-                      ],
+                          const Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.black),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
             actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: CircleAvatar(
+                  backgroundColor: Colors.white.withValues(alpha: 0.9),
+                  child: PopupMenuButton<String>(
+                    icon: const Icon(Icons.person, color: Colors.black),
+                    onSelected: (String value) async {
+                      if (value == 'Profile') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                } else if (value == 'Logout') {
+                        await FirebaseAuth.instance.signOut();
+                        if (context.mounted) Navigator.pushReplacementNamed(context, '/auth');
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'Profile',
+                        child: Text('My Profile'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'Logout',
+                        child: Text('Logout'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: 16.0),
                 child: CircleAvatar(
@@ -258,9 +295,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                         AppLocalizations.tr(loc, 'Suggestions', 'सुझाव', 'सूचना'),
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
-                      Text(
-                        AppLocalizations.tr(loc, 'See All', 'सभी देखें', 'सर्व पहा'),
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
+                      
                       ),
                     ],
                   ),
@@ -319,26 +354,83 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
                   ),
                   const SizedBox(height: 16),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(16),
-                      leading: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.green.shade50, shape: BoxShape.circle),
-                        child: const Icon(Icons.check_circle, color: Colors.green),
-                      ),
-                      title: const Text('Electrician - Confirmed', style: TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: const Text('Worker arriving in 15 mins'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () {
-                        Navigator.pushNamed(context, '/liveTracking');
-                      },
-                    ),
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('jobs')
+                        .where('customer_id', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                        .orderBy('created_at', descending: true)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'No active bookings.\nTap a service above to book one!',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey, fontSize: 16),
+                            ),
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: EdgeInsets.zero,
+                        itemCount: snapshot.data!.docs.length,
+                        itemBuilder: (context, index) {
+                          final doc = snapshot.data!.docs[index];
+                          final data = doc.data() as Map<String, dynamic>;
+                          final status = data['status'] ?? 'unknown';
+                          
+                          Color statusColor = Colors.orange;
+                          IconData statusIcon = Icons.access_time;
+                          if (status == 'assigned') {
+                            statusColor = Colors.blue;
+                            statusIcon = Icons.engineering;
+                          } else if (status == 'completed') {
+                            statusColor = Colors.green;
+                            statusIcon = Icons.check_circle;
+                          }
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.all(16),
+                              leading: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.1), 
+                                  shape: BoxShape.circle
+                                ),
+                                child: Icon(statusIcon, color: statusColor),
+                              ),
+                              title: Text(data['service_type'] ?? 'Service', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('Status: ${status.toUpperCase()} • ₹${data['service_rate']}'),
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () {
+                                // Navigate to details or live tracking
+                              },
+                            ),
+                          );
+                        },
+                      );
+                    },
                   ),
                   const SizedBox(height: 100), // Padding for the floating action button to not block content
                 ],
@@ -364,14 +456,7 @@ class CustomSearchDelegate extends SearchDelegate {
 
   @override
   List<Widget>? buildActions(BuildContext context) {
-    return [
-      IconButton(
-        icon: const Icon(Icons.clear),
-        onPressed: () {
-          query = '';
-        },
-      )
-    ];
+    return [];
   }
 
   @override

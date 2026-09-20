@@ -27,6 +27,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _mobileController = TextEditingController();
+  final _addressController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _aadhaarController = TextEditingController();
@@ -50,13 +51,14 @@ class _AuthScreenState extends State<AuthScreen> {
     _fullNameController.dispose();
     _emailController.dispose();
     _mobileController.dispose();
+    _addressController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _aadhaarController.dispose();
     super.dispose();
   }
 
-  void _submit() {
+  void _submit() async {
     setState(() {
       _showTermsError = _authMode == AuthMode.createAccount && !_termsAccepted;
     });
@@ -69,29 +71,41 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
       
-      // Navigate and show success
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${_authMode == AuthMode.signIn ? "Logged in" : "Registered"} successfully as ${_selectedRole.displayName}'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      // Sync with Global App State
       final appState = Provider.of<AppState>(context, listen: false);
-      appState.setRole(_selectedRole.displayName);
+      try {
+        await appState.authenticate(
+          isLogin: _authMode == AuthMode.signIn,
+          email: _emailController.text,
+          password: _passwordController.text,
+          role: _selectedRole.displayName,
+          name: _fullNameController.text.isNotEmpty ? _fullNameController.text : null,
+          phone: _mobileController.text.isNotEmpty ? _mobileController.text : null,
+          profession: _selectedProfession,
+          address: _addressController.text.isNotEmpty ? _addressController.text : null,
+        );
 
-      // Routing to mock screens based on role
-      switch (_selectedRole) {
-        case UserRole.customer:
-          Navigator.pushReplacementNamed(context, '/customerHome');
-          break;
-        case UserRole.worker:
-          Navigator.pushReplacementNamed(context, '/workerHome');
-          break;
-        case UserRole.admin:
-          Navigator.pushReplacementNamed(context, '/adminDashboard');
-          break;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${_authMode == AuthMode.signIn ? "Logged in" : "Registered"} successfully as ${_selectedRole.displayName}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        switch (_selectedRole) {
+          case UserRole.customer:
+            Navigator.pushReplacementNamed(context, '/customerHome');
+            break;
+          case UserRole.worker:
+            Navigator.pushReplacementNamed(context, '/workerHome');
+            break;
+          case UserRole.admin:
+            Navigator.pushReplacementNamed(context, '/adminDashboard');
+            break;
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Authentication Error: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -219,6 +233,14 @@ class _AuthScreenState extends State<AuthScreen> {
                       LengthLimitingTextInputFormatter(10),
                     ],
                     validator: Validators.validateMobileNumber,
+                  ),
+
+                if (!isLogin)
+                  CustomTextField(
+                    label: 'Address (Flat, Street, City)',
+                    controller: _addressController,
+                    prefixIcon: const Icon(Icons.location_on),
+                    validator: (val) => val == null || val.isEmpty ? 'Address is required' : null,
                   ),
 
                 if (!isLogin && _selectedRole == UserRole.worker) ...[

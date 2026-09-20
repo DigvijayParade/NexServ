@@ -43,3 +43,15 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Secrets - never commit these
+*serviceAccountKey*.json
+*adminsdk*.json
+*.env
+.env*
+
+functions/node_modules/
+serviceAccountKey.json
+
+.jdk/
+.jdk21/

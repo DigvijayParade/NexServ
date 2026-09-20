@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // Global Write Block: Force all writes through the Express API
+    match /{document=**} {
+      allow write: if false;
+    }
+
+    // Role-based helper functions
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return getRole() == 'admin';
+    }
+
+    // Users & Workers Collections
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+    }
+    
+    match /workers/{workerId} {
+      // Workers can be read by themselves, admins, and potentially customers if assigned (simplified for now)
+      allow read: if isOwner(workerId) || isAdmin() || request.auth != null;
+    }
+
+    // Jobs Collection
+    match /jobs/{jobId} {
+      allow read: if 
+        // Admin reads everything
+        isAdmin() ||
+        // Customer can read their own created jobs
+        resource.data.customer_id == request.auth.uid ||
+        // Workers can read jobs that are open or assigned to them
+        (getRole() == 'worker' && (resource.data.status == 'open' || resource.data.assigned_worker_id == request.auth.uid));
+    }
+    
+    // Broadcast Logs (Strictly internal, only admins can view)
+    match /broadcast_logs/{logId} {
+      allow read: if isAdmin();
+    }
+  }
+}

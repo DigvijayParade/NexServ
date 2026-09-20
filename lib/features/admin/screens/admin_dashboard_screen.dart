@@ -1,170 +1,120 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-
-import '../widgets/worker_verification_tab.dart';
-import '../widgets/ai_demand_map_tab.dart';
-import '../widgets/sos_monitoring_tab.dart';
-import '../widgets/welfare_fund_tab.dart';
-import 'package:provider/provider.dart';
-import '../../../core/state/app_state.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import '../../../core/config.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key});
+  const AdminDashboardScreen({Key? key}) : super(key: key);
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  bool _isRefreshing = false;
+  late Future<Map<String, dynamic>> _statsFuture;
 
-  void _refreshData() async {
-    setState(() {
-      _isRefreshing = true;
-    });
-    await Future.delayed(const Duration(seconds: 1));
-    if (mounted) {
-      setState(() {
-        _isRefreshing = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Live regional metrics updated!')),
-      );
+  @override
+  void initState() {
+    super.initState();
+    _statsFuture = _fetchStats();
+  }
+
+  Future<Map<String, dynamic>> _fetchStats() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception("Not logged in");
+    final token = await user.getIdToken();
+    
+    final response = await http.get(
+      Uri.parse('${Config.apiBaseUrl}/admin/dashboard/stats'),
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load stats: ${response.statusCode} ${response.body}");
     }
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _statsFuture = _fetchStats();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final appState = Provider.of<AppState>(context);
-    final bool isHindi = appState.locale == 'Hindi';
+    return Scaffold(
+      backgroundColor: Colors.grey.shade100,
+      appBar: AppBar(
+        title: const Text('Admin Dashboard', style: TextStyle(color: Colors.black)),
+        backgroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.black),
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refresh,
+          )
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _statsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return ListView( // ListView allows RefreshIndicator to work
+                children: [
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.4),
+                  Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red))),
+                ],
+              );
+            }
 
-    return DefaultTabController(
-      length: 4,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isHindi ? 'दिल्ली शहरी श्रमिक सहकारी संघ' : 'Delhi Urban Workers Co-op',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const Text('System Administrator', style: TextStyle(fontSize: 12, color: Colors.white70)),
-            ],
-          ),
-          actions: [
-            if (_isRefreshing)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-              )
-            else
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _refreshData,
-              ),
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, '/');
-              },
-            ),
-          ],
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(280),
-            child: Column(
+            final data = snapshot.data!;
+            return ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const CircleAvatar(
-                        child: Icon(Icons.admin_panel_settings),
-                      ),
-                      SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment(value: 'English', label: Text('English')),
-                          ButtonSegment(value: 'Hindi', label: Text('हिंदी')),
-                        ],
-                        selected: {appState.locale},
-                        onSelectionChanged: (val) {
-                          appState.toggleLanguage();
-                        },
-                      ),
-                    ],
+                _buildStatCard("Total Jobs", data['total_jobs'].toString(), Icons.work, Colors.blue),
+                _buildStatCard("Completed Jobs", data['completed_jobs'].toString(), Icons.check_circle, Colors.green),
+                _buildStatCard("Total Revenue", "?${data['total_revenue']}", Icons.currency_rupee, Colors.orange),
+                _buildStatCard("Active Workers", data['active_workers'].toString(), Icons.people, Colors.purple),
+                _buildStatCard("Welfare Fund", "?${data['welfare_fund_balance']}", Icons.account_balance, Colors.teal),
+                const SizedBox(height: 24),
+                const Text("Platform Overview", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text("Charts and detailed metrics can be added here in the future."),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    children: [
-                      Expanded(child: _buildMetricCard('Verified Workers', '1,240 / 1,500', Icons.people)),
-                      const SizedBox(width: 8),
-                      Expanded(child: _buildMetricCard('Completed Jobs', '${appState.totalActiveJobs} Today', Icons.check_circle)),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Row(
-                    children: [
-                      Expanded(child: _buildMetricCard('Gross Volume', '₹1,19,700', Icons.currency_rupee)),
-                      const SizedBox(width: 8),
-                      Expanded(child: _buildMetricCard('Welfare Fund (3%)', '₹${appState.welfarePool} Today', Icons.shield)),
-                    ],
-                  ),
-                ),
-                const TabBar(
-                  isScrollable: true,
-                  tabs: [
-                    Tab(icon: Icon(Icons.verified_user), text: 'Verification Queue'),
-                    Tab(icon: Icon(Icons.map), text: 'AI Demand Heatmap'),
-                    Tab(icon: Icon(Icons.warning), text: 'Live & SOS Monitoring'),
-                    Tab(icon: Icon(Icons.account_balance_wallet), text: 'Welfare Fund'),
-                  ],
-                ),
+                )
               ],
-            ),
-          ),
-        ),
-        body: const TabBarView(
-          children: [
-            WorkerVerificationTab(),
-            AIDemandMapTab(),
-            SosMonitoringTab(),
-            WelfareFundTab(),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
     return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 16, color: Colors.blue.shade700),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(fontSize: 10, color: Colors.grey),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-          ],
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: color.withOpacity(0.2),
+          child: Icon(icon, color: color),
         ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+        trailing: Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
       ),
     );
   }

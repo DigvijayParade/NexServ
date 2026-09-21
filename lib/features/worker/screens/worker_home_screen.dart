@@ -19,73 +19,33 @@ class WorkerHomeScreen extends StatefulWidget {
 }
 
 class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
-  Position? _currentPosition;
-  bool _isLoadingLocation = true;
-  String _locationError = '';
+  String _workerProfession = '';
+  bool _isLoadingProfile = true;
 
   @override
   void initState() {
     super.initState();
-    _determinePosition();
+    _loadWorkerProfile();
+    _loadWorkerProfile();
   }
 
-  Future<void> _determinePosition() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      // Mock location for demo purposes so it doesn't get stuck
-      setState(() {
-        _currentPosition = Position(
-          latitude: 28.6304,
-          longitude: 77.2177,
-          timestamp: DateTime.now(),
-          accuracy: 0,
-          altitude: 0,
-          heading: 0,
-          speed: 0,
-          speedAccuracy: 0,
-          altitudeAccuracy: 0,
-          headingAccuracy: 0,
-        );
-        _isLoadingLocation = false;
-        _locationError = '';
-      });
+    Future<void> _loadWorkerProfile() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() => _isLoadingProfile = false);
       return;
     }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        setState(() {
-          _locationError = 'Location permissions are denied';
-          _isLoadingLocation = false;
-        });
-        return;
-      }
-    }
-    
-    if (permission == LocationPermission.deniedForever) {
-      setState(() {
-        _locationError = 'Location permissions are permanently denied.';
-        _isLoadingLocation = false;
-      });
-      return;
-    }
-
     try {
-      Position position = await Geolocator.getCurrentPosition();
-      setState(() {
-        _currentPosition = position;
-        _isLoadingLocation = false;
-      });
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final profession = doc.data()?['service_category'] ?? '';
+      if (mounted) {
+        setState(() {
+          _workerProfession = profession;
+          _isLoadingProfile = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _locationError = 'Failed to get location';
-        _isLoadingLocation = false;
-      });
+      if (mounted) setState(() => _isLoadingProfile = false);
     }
   }
 
@@ -265,45 +225,37 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
           )
         ],
       ),
-      body: _isLoadingLocation 
+      body: _isLoadingProfile 
         ? const Center(child: CircularProgressIndicator())
-        : _locationError.isNotEmpty 
-          ? Center(child: Text(_locationError, style: const TextStyle(color: Colors.red)))
-          : !appState.isWorkerOnline
+        : !appState.isWorkerOnline
             ? const Center(child: Text("Go online to see nearby jobs", style: TextStyle(fontSize: 18, color: Colors.grey)))
             : StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('jobs').where('status', whereIn: ['open', 'assigned']).snapshots(),
+                stream: FirebaseFirestore.instance
+                    .collection('jobs')
+                    .where('status', whereIn: ['open', 'assigned'])
+                    .where('service_category', isEqualTo: _workerProfession)
+                    .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return const Center(child: Text("No nearby jobs available right now", style: TextStyle(fontSize: 18, color: Colors.grey)));
+                    return Center(child: Text('No ${_workerProfession.isEmpty ? "matching" : _workerProfession} jobs available right now', style: TextStyle(fontSize: 18, color: Colors.grey)));
                   }
 
-                  // Client-side Haversine filtering
-                  final lat = _currentPosition!.latitude;
-                  final lng = _currentPosition!.longitude;
-                  
-                  List<Map<String, dynamic>> nearbyJobs = [];
-                  for (var doc in snapshot.data!.docs) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    if (data['location'] != null && data['location']['latitude'] != null) {
-                      final jobLat = data['location']['latitude'];
-                      final jobLng = data['location']['longitude'];
-                      final dist = Utils.calculateDistance(lat, lng, jobLat, jobLng);
-                      if (dist <= 50.0) { // 50km radius
-                        data['id'] = doc.id;
-                        data['distance_km'] = dist;
-                        nearbyJobs.add(data);
-                      }
+                  // Simple list - already filtered by profession in stream query
+                    final List<Map<String, dynamic>> nearbyJobs = [];
+                    for (var doc in snapshot.data!.docs) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      data['id'] = doc.id;
+                      nearbyJobs.add(data);
                     }
-                  }
 
-                  nearbyJobs.sort((a, b) => (a['distance_km'] as double).compareTo(b['distance_km'] as double));
-
-                  if (nearbyJobs.isEmpty) {
-                    return const Center(child: Text("No jobs within 50km", style: TextStyle(fontSize: 18, color: Colors.grey)));
+                    if (nearbyJobs.isEmpty) {
+                    return Center(child: Text(
+                        'No ${_workerProfession.isEmpty ? "matching" : _workerProfession} jobs available right now',
+                        style: const TextStyle(fontSize: 18, color: Colors.grey),
+                      ));
                   }
 
                   return ListView.builder(
@@ -331,7 +283,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                                 children: [
                                   const Icon(Icons.location_on, size: 16, color: Colors.grey),
                                   const SizedBox(width: 4),
-                                  Text('${job["distance_km"].toStringAsFixed(1)} km away', style: const TextStyle(color: Colors.grey)),
+                                  Text(job['service_category'] ?? '', style: const TextStyle(color: Colors.grey)),
                                 ],
                               ),
                               const SizedBox(height: 16),

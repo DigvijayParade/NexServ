@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -117,6 +118,26 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
     }
   }
 
+  Future<GeoPoint> _getCustomerGeoPoint() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return const GeoPoint(20.5937, 78.9629); // Centre of India fallback
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever || permission == LocationPermission.denied) {
+        return const GeoPoint(20.5937, 78.9629);
+      }
+
+      Position pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
+      return GeoPoint(pos.latitude, pos.longitude);
+    } catch (e) {
+      return const GeoPoint(20.5937, 78.9629); // fallback
+    }
+  }
+
   void _startBackendJobCreation() async {
     setState(() {
       _currentStep = 3;
@@ -140,7 +161,7 @@ class _BookingBottomSheetState extends State<BookingBottomSheet> {
         'status': 'searching',
         'otp': otp,
         'created_at': FieldValue.serverTimestamp(),
-        'location': const GeoPoint(28.6304, 77.2177)
+        'location': await _getCustomerGeoPoint()
       });
       
       // Wait for AI Match overlay animation to finish

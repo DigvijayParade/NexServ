@@ -37,6 +37,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _termsAccepted = false;
   bool _rememberMe = false;
   bool _showTermsError = false;
+  bool _isLoading = false;
 
   final List<String> _professions = [
     "Electrician",
@@ -59,6 +60,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _submit() async {
+    setState(() => _isLoading = true);
     setState(() {
       _showTermsError = _authMode == AuthMode.createAccount && !_termsAccepted;
     });
@@ -103,9 +105,13 @@ class _AuthScreenState extends State<AuthScreen> {
             break;
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Authentication Error: $e'), backgroundColor: Colors.red),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -351,17 +357,23 @@ class _AuthScreenState extends State<AuthScreen> {
                 const SizedBox(height: 24),
 
                 ElevatedButton(
-                  onPressed: _submit,
+                  onPressed: _isLoading ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black, // Uber-style black button
+                    backgroundColor: Colors.black,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text(
-                    isLogin ? 'Sign In' : 'Create Account',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                        )
+                      : Text(
+                          isLogin ? 'Sign In' : 'Create Account',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
                 ),
               ],
             ),

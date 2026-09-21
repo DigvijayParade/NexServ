@@ -15,6 +15,22 @@ class CustomerHomeScreen extends StatefulWidget {
 }
 
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
+  String _profileAddress = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAddress();
+  }
+
+  Future<void> _loadAddress() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final addr = doc.data()?['address'] ?? '';
+    if (mounted) setState(() => _profileAddress = addr);
+  }
+
   final List<Map<String, dynamic>> _categories = [
     {'name': 'Electrician', 'name_hi': 'बिजली मिस्त्री', 'name_mr': 'इलेक्ट्रिशियन', 'icon': Icons.bolt, 'color': Colors.amber.shade700},
     {'name': 'Plumber', 'name_hi': 'प्लंबर', 'name_mr': 'प्लंबर', 'icon': Icons.water_drop, 'color': Colors.blue.shade600},
@@ -162,7 +178,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
-                              appState.userLocation,
+                              _profileAddress.isNotEmpty ? _profileAddress : 'Loading...',
                               style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -180,26 +196,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 padding: const EdgeInsets.only(right: 8.0),
                 child: CircleAvatar(
                   backgroundColor: Colors.white.withValues(alpha: 0.9),
-                  child: PopupMenuButton<String>(
+                  child: IconButton(
                     icon: const Icon(Icons.person, color: Colors.black),
-                    onSelected: (String value) async {
-                      if (value == 'Profile') {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
-                } else if (value == 'Logout') {
-                        await FirebaseAuth.instance.signOut();
-                        if (context.mounted) Navigator.pushReplacementNamed(context, '/auth');
-                      }
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
                     },
-                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                      const PopupMenuItem<String>(
-                        value: 'Profile',
-                        child: Text('My Profile'),
-                      ),
-                      const PopupMenuItem<String>(
-                        value: 'Logout',
-                        child: Text('Logout'),
-                      ),
-                    ],
                   ),
                 ),
               ),
@@ -294,8 +295,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       Text(
                         AppLocalizations.tr(loc, 'Suggestions', 'सुझाव', 'सूचना'),
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
-                      ),
-                      
                       ),
                     ],
                   ),

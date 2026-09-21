@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 
 class ActiveJobScreen extends StatefulWidget {
@@ -15,6 +16,14 @@ class _ActiveJobScreenState extends State<ActiveJobScreen> {
   bool _isCompleted = false;
   double _extraPartsCost = 0.0;
   final double _baseFare = 299.0;
+  late String _generatedOtp;
+
+  @override
+  void initState() {
+    super.initState();
+    // Generate a random 4-digit OTP for this job session
+    _generatedOtp = (1000 + Random().nextInt(9000)).toString();
+  }
 
   @override
   void dispose() {
@@ -24,7 +33,7 @@ class _ActiveJobScreenState extends State<ActiveJobScreen> {
   }
 
   void _verifyOTP() {
-    if (_otpController.text == '1234') {
+    if (_otpController.text == _generatedOtp) {
       setState(() {
         _isStarted = true;
       });
@@ -84,8 +93,8 @@ class _ActiveJobScreenState extends State<ActiveJobScreen> {
                         backgroundColor: Color(0xFF0F5A47),
                         child: Icon(Icons.person, color: Colors.white),
                       ),
-                      title: const Text('Anjali Gupta'),
-                      subtitle: const Text('Flat 4B, Sector 18'),
+                      title: const Text('Customer'),
+                      subtitle: const Text('Address on file'),
                       trailing: IconButton(
                         icon: const Icon(Icons.call, color: Colors.green),
                         onPressed: () {
@@ -110,7 +119,7 @@ class _ActiveJobScreenState extends State<ActiveJobScreen> {
                               maxLength: 4,
                               decoration: InputDecoration(
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                hintText: '1234',
+                                hintText: '4-digit OTP',
                                 counterText: '', // BUG FIX #5: Hide ugly counter text under OTP field
                               ),
                             ),

@@ -52,11 +52,17 @@ class AppState extends ChangeNotifier {
 
     try {
       if (isLogin) {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+        final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+        // Check if user is banned
+        final userData = await getUserData(cred.user!.uid);
+        if (userData != null && userData['banned'] == true) {
+          await FirebaseAuth.instance.signOut();
+          throw Exception('Your account has been suspended. Please contact the administrator.');
+        }
       } else {
         UserCredential cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
         // Save profile directly to Firestore
-        await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set({
+        final userData = {
           'uid': cred.user!.uid,
           'role': role.toLowerCase(),
           'email': email,
@@ -65,10 +71,18 @@ class AppState extends ChangeNotifier {
           'address': address ?? '',
           'service_category': profession,
           'created_at': FieldValue.serverTimestamp(),
-        });
+        };
+        
+        // Save exclusively to role-specific collections (customers, workers, admins)
+        String roleCollection = 'customers';
+        if (role.toLowerCase() == 'worker') roleCollection = 'workers';
+        if (role.toLowerCase().contains('cooperative') || role.toLowerCase() == 'admin') roleCollection = 'admins';
+        
+        await FirebaseFirestore.instance.collection(roleCollection).doc(cred.user!.uid).set(userData);
       }
     } catch (e) {
       debugPrint('Auth error: \$e');
+      rethrow;
     }
   }
 
@@ -183,5 +197,16 @@ class AppState extends ChangeNotifier {
     _hasIncomingJob = false;
     FirebaseAuth.instance.signOut();
     notifyListeners();
+  }
+
+  // Helper to fetch user data since we no longer have a central 'users' collection
+  Future<Map<String, dynamic>?> getUserData(String uid) async {
+    for (var collection in ['customers', 'workers', 'admins']) {
+      final doc = await FirebaseFirestore.instance.collection(collection).doc(uid).get();
+      if (doc.exists) {
+        return doc.data();
+      }
+    }
+    return null;
   }
 }

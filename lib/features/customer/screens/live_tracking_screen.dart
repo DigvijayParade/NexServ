@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/rating_dialog.dart';
 
 class LiveTrackingScreen extends StatefulWidget {
-  const LiveTrackingScreen({super.key});
+  final String jobId;
+  const LiveTrackingScreen({super.key, required this.jobId});
 
   @override
   State<LiveTrackingScreen> createState() => _LiveTrackingScreenState();
@@ -13,23 +15,19 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
 
   final List<String> _steps = [
     'Request Confirmed',
-    'Worker Assigned (Ramesh Kumar)',
+    'Worker Assigned',
     'Worker on the way',
     'Service Completed'
   ];
 
-  void _simulateCompletion() {
-    setState(() {
-      _currentStep = 3;
-    });
+  void _showRatingAndComplete() {
+    setState(() => _currentStep = 3);
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => const RatingDialog(),
     ).then((_) {
-      if (!mounted) return;
-      // User submitted rating or skipped
-      Navigator.of(context).pushReplacementNamed('/customerHome');
+      if (mounted) Navigator.of(context).pushReplacementNamed('/customerHome');
     });
   }
 
@@ -43,14 +41,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('No')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              Navigator.pop(ctx); // Close dialog
-              Navigator.pop(context); // Go back home
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Booking Cancelled')),
-              );
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
+                'status': 'cancelled'
+              });
+              if (mounted) Navigator.pop(context); // Go back home
             },
-            child: const Text('Yes, Cancel', style: TextStyle(color: Colors.white)),
+            child: const Text('Yes, Cancel'),
           ),
         ],
       ),
@@ -62,63 +60,149 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live Tracking'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 1,
       ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              Expanded(
-                child: Stepper(
-                  currentStep: _currentStep,
-                  controlsBuilder: (context, details) => const SizedBox.shrink(),
-                  steps: List.generate(
-                    _steps.length,
-                    (index) => Step(
-                      title: Text(_steps[index], style: const TextStyle(fontWeight: FontWeight.bold)),
-                      content: index == 2 && _currentStep == 2
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Ramesh is 5 mins away.'),
-                                const SizedBox(height: 8),
-                                OutlinedButton(
-                                  onPressed: _cancelRequest,
-                                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                                  child: const Text('Cancel Request'),
-                                ),
-                              ],
-                            )
-                          : const SizedBox.shrink(),
-                      isActive: _currentStep >= index,
-                      state: _currentStep > index ? StepState.complete : StepState.indexed,
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).snapshots(),
+        builder: (context, jobSnapshot) {
+          if (!jobSnapshot.hasData || !jobSnapshot.data!.exists) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final jobData = jobSnapshot.data!.data() as Map<String, dynamic>;
+          final workerId = jobData['assigned_worker_id'];
+          final status = jobData['status'];
+
+          if (status == 'completed' && _currentStep != 3) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+               _showRatingAndComplete();
+            });
+          }
+
+          return StreamBuilder<DocumentSnapshot>(
+            stream: workerId != null ? FirebaseFirestore.instance.collection('users').doc(workerId).snapshots() : null,
+            builder: (context, workerSnapshot) {
+              String workerName = "Worker";
+              String workerPhone = "";
+              if (workerSnapshot.hasData && workerSnapshot.data!.exists) {
+                final workerData = workerSnapshot.data!.data() as Map<String, dynamic>;
+                workerName = workerData['name'] ?? "Worker";
+                workerPhone = workerData['phone'] ?? "";
+              }
+
+              return Column(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      color: Colors.grey.shade300,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.map, size: 60, color: Colors.grey),
+                            const SizedBox(height: 16),
+                            const Text('Live Map Integration Pending'),
+                            Text('Tracking $workerName to your location...'),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: ElevatedButton(
-                  onPressed: _currentStep == 2 ? _simulateCompletion : null,
-                  child: const Text('DEBUG: Simulate Service Completion'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('SOS Alert sent to Cooperative Admin and Emergency Contacts!'), backgroundColor: Colors.red),
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -5))],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 25,
+                                backgroundColor: Colors.teal.shade100,
+                                child: const Icon(Icons.person, color: Colors.teal),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(workerName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                    Text('4.9 -? (120+ jobs)', style: TextStyle(color: Colors.grey.shade600)),
+                                  ],
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.call, color: Colors.green),
+                                    onPressed: () {},
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.chat, color: Colors.blue),
+                                    onPressed: () {},
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          const Divider(),
+                          const SizedBox(height: 16),
+                          const Text('OTP for Service Completion:', style: TextStyle(color: Colors.grey)),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text('1 2 3 4', style: TextStyle(color: Colors.white, fontSize: 24, letterSpacing: 8, fontWeight: FontWeight.bold)),
+                          ),
+                          const Spacer(),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: _cancelRequest,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                    side: const BorderSide(color: Colors.red),
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                  ),
+                                  child: const Text('Cancel Request'),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () {},
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.black,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                  ),
+                                  child: const Text('Pay Now'),
+                                ),
+                              ),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
           );
-        },
-        backgroundColor: Colors.red,
-        icon: const Icon(Icons.warning, color: Colors.white),
-        label: const Text('SOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        }
       ),
     );
   }

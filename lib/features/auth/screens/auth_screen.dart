@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../core/state/app_state.dart';
-
 import '../../../core/utils/validators.dart';
 import '../models/enums.dart';
 import '../widgets/custom_text_field.dart';
@@ -23,7 +22,6 @@ class _AuthScreenState extends State<AuthScreen> {
   AuthMode _authMode = AuthMode.signIn;
   UserRole _selectedRole = UserRole.customer;
 
-  // Controllers
   final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _mobileController = TextEditingController();
@@ -32,7 +30,6 @@ class _AuthScreenState extends State<AuthScreen> {
   final _confirmPasswordController = TextEditingController();
   final _aadhaarController = TextEditingController();
 
-  // State
   String? _selectedProfession;
   bool _termsAccepted = false;
   bool _rememberMe = false;
@@ -59,7 +56,60 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
+  Future<bool> _showAdminPinDialog() async {
+    bool isAuthorized = false;
+    final TextEditingController pinController = TextEditingController();
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cooperative Access'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter Admin PIN to continue:'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'PIN',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (pinController.text == 'NEXSERV2026') {
+                isAuthorized = true;
+                Navigator.of(ctx).pop();
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Invalid PIN'), backgroundColor: Colors.red),
+                );
+                pinController.clear();
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+    return isAuthorized;
+  }
+
   void _submit() async {
+    if (_selectedRole == UserRole.admin) {
+      bool pinValid = await _showAdminPinDialog();
+      if (!pinValid) return;
+    }
+    
     setState(() => _isLoading = true);
     setState(() {
       _showTermsError = _authMode == AuthMode.createAccount && !_termsAccepted;
@@ -70,6 +120,7 @@ class _AuthScreenState extends State<AuthScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select your primary profession.'), backgroundColor: Colors.red),
         );
+        setState(() => _isLoading = false);
         return;
       }
       
@@ -86,23 +137,25 @@ class _AuthScreenState extends State<AuthScreen> {
           address: _addressController.text.isNotEmpty ? _addressController.text : null,
         );
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${_authMode == AuthMode.signIn ? "Logged in" : "Registered"} successfully as ${_selectedRole.displayName}'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${_authMode == AuthMode.signIn ? "Logged in" : "Registered"} successfully as ${_selectedRole.displayName}'),
+              backgroundColor: Colors.green,
+            ),
+          );
 
-        switch (_selectedRole) {
-          case UserRole.customer:
-            Navigator.pushReplacementNamed(context, '/customerHome');
-            break;
-          case UserRole.worker:
-            Navigator.pushReplacementNamed(context, '/workerHome');
-            break;
-          case UserRole.admin:
-            Navigator.pushReplacementNamed(context, '/adminDashboard');
-            break;
+          switch (_selectedRole) {
+            case UserRole.customer:
+              Navigator.pushReplacementNamed(context, '/customerHome');
+              break;
+            case UserRole.worker:
+              Navigator.pushReplacementNamed(context, '/workerHome');
+              break;
+            case UserRole.admin:
+              Navigator.pushReplacementNamed(context, '/adminDashboard');
+              break;
+          }
         }
       } catch (e) {
         if (mounted) {
@@ -113,6 +166,8 @@ class _AuthScreenState extends State<AuthScreen> {
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
+    } else {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -137,248 +192,188 @@ class _AuthScreenState extends State<AuthScreen> {
     final isLogin = _authMode == AuthMode.signIn;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('NexServ'),
+        title: const Text('NexServ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // App Logo
-                Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Image.asset(
-                      'assets/images/app_logo.jpg',
-                      width: 80,
-                      height: 80,
-                    ),
-                  ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset('assets/images/premium_dark_bg.jpg', fit: BoxFit.cover),
+          ),
+          Positioned.fill(
+            child: Container(color: Colors.black.withOpacity(0.4)),
+          ),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 5))
+                  ]
                 ),
-                const SizedBox(height: 8),
-                const Center(
-                  child: Text(
-                    'NexServ',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const Center(
-                  child: Text(
-                    'AI-Powered Cooperative Services',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Auth Mode Switcher
-                SegmentedButton<AuthMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: AuthMode.signIn,
-                      label: Text('Sign In'),
-                      icon: Icon(Icons.login),
-                    ),
-                    ButtonSegment(
-                      value: AuthMode.createAccount,
-                      label: Text('Create Account'),
-                      icon: Icon(Icons.person_add),
-                    ),
-                  ],
-                  selected: {_authMode},
-                  onSelectionChanged: (Set<AuthMode> newSelection) {
-                    setState(() {
-                      _authMode = newSelection.first;
-                    });
-                  },
-                ),
-                const SizedBox(height: 24),
-
-                RoleSelector(
-                  selectedRole: _selectedRole,
-                  onRoleChanged: (role) {
-                    setState(() {
-                      _selectedRole = role;
-                    });
-                  },
-                ),
-                
-                const SizedBox(height: 16),
-
-                if (!isLogin)
-                  CustomTextField(
-                    label: 'Full Name',
-                    controller: _fullNameController,
-                    prefixIcon: const Icon(Icons.person),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
-                    ],
-                    validator: Validators.validateFullName,
-                  ),
-
-                CustomTextField(
-                  label: 'Email Address',
-                  controller: _emailController,
-                  prefixIcon: const Icon(Icons.email),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: Validators.validateEmail,
-                ),
-
-                if (!isLogin)
-                  CustomTextField(
-                    label: 'Mobile Number',
-                    controller: _mobileController,
-                    prefixIcon: const Icon(Icons.phone),
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(10),
-                    ],
-                    validator: Validators.validateMobileNumber,
-                  ),
-
-                if (!isLogin)
-                  CustomTextField(
-                    label: 'Address (Flat, Street, City)',
-                    controller: _addressController,
-                    prefixIcon: const Icon(Icons.location_on),
-                    validator: (val) => val == null || val.isEmpty ? 'Address is required' : null,
-                  ),
-
-                if (!isLogin && _selectedRole == UserRole.worker) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        labelText: 'Profession',
-                        prefixIcon: Icon(Icons.work),
-                        border: OutlineInputBorder(),
-                      ),
-                      initialValue: _selectedProfession,
-                      items: _professions.map((p) {
-                        return DropdownMenuItem(value: p, child: Text(p));
-                      }).toList(),
-                      onChanged: (val) {
-                        setState(() {
-                          _selectedProfession = val;
-                        });
-                      },
-                      validator: (value) =>
-                          value == null ? 'Please select your primary profession.' : null,
-                    ),
-                  ),
-                  CustomTextField(
-                    label: 'Worker Verification ID (Aadhaar)',
-                    controller: _aadhaarController,
-                    prefixIcon: const Icon(Icons.badge),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(12),
-                    ],
-                    validator: Validators.validateAadhaar,
-                  ),
-                ],
-
-                PasswordField(
-                  label: 'Password',
-                  controller: _passwordController,
-                  validator: (val) => Validators.validatePassword(val, isRegistration: !isLogin),
-                ),
-
-                if (!isLogin)
-                  PasswordField(
-                    label: 'Confirm Password',
-                    controller: _confirmPasswordController,
-                    validator: (val) => Validators.validateConfirmPassword(val, _passwordController.text),
-                  ),
-
-                if (isLogin) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: _rememberMe,
-                            onChanged: (val) {
-                              setState(() {
-                                _rememberMe = val ?? false;
-                              });
-                            },
-                          ),
-                          const Text('Remember Me'),
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Image.asset('assets/images/app_logo.jpg', width: 80, height: 80),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Center(child: Text('NexServ', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
+                      const Center(child: Text('AI-Powered Cooperative Services', style: TextStyle(fontSize: 12, color: Colors.grey))),
+                      const SizedBox(height: 24),
+                      SegmentedButton<AuthMode>(
+                        segments: const [
+                          ButtonSegment(value: AuthMode.signIn, label: Text('Sign In'), icon: Icon(Icons.login)),
+                          ButtonSegment(value: AuthMode.createAccount, label: Text('Create Account'), icon: Icon(Icons.person_add)),
                         ],
-                      ),
-                      TextButton(
-                        onPressed: _showForgotPasswordDialog,
-                        child: const Text('Forgot Password?'),
-                      ),
-                    ],
-                  ),
-                ],
-
-                if (!isLogin) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _termsAccepted,
-                        isError: _showTermsError,
-                        onChanged: (val) {
-                          setState(() {
-                            _termsAccepted = val ?? false;
-                            if (_termsAccepted) _showTermsError = false;
-                          });
+                        selected: {_authMode},
+                        onSelectionChanged: (Set<AuthMode> newSelection) {
+                          setState(() => _authMode = newSelection.first);
                         },
                       ),
-                      const Expanded(
-                        child: Text(
-                          'I accept the Terms and Conditions',
-                          style: TextStyle(fontSize: 14),
+                      const SizedBox(height: 24),
+                      RoleSelector(
+                        selectedRole: _selectedRole,
+                        onRoleChanged: (role) => setState(() => _selectedRole = role),
+                      ),
+                      const SizedBox(height: 24),
+                      if (!isLogin) ...[
+                        CustomTextField(
+                          controller: _fullNameController,
+                          label: 'Full Name',
+                          icon: Icons.person_outline,
+                          validator: Validators.validateName,
+                        ),
+                        const SizedBox(height: 16),
+                        CustomTextField(
+                          controller: _mobileController,
+                          label: 'Mobile Number',
+                          icon: Icons.phone_android,
+                          keyboardType: TextInputType.phone,
+                          validator: Validators.validatePhone,
+                        ),
+                        const SizedBox(height: 16),
+                        if (_selectedRole == UserRole.worker) ...[
+                          DropdownButtonFormField<String>(
+                            value: _selectedProfession,
+                            decoration: const InputDecoration(
+                              labelText: 'Primary Profession',
+                              prefixIcon: Icon(Icons.handyman),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                            ),
+                            items: _professions.map((prof) => DropdownMenuItem(value: prof, child: Text(prof))).toList(),
+                            onChanged: (val) => setState(() => _selectedProfession = val),
+                          ),
+                          const SizedBox(height: 16),
+                          CustomTextField(
+                            controller: _aadhaarController,
+                            label: 'Aadhaar ID (for KYC)',
+                            icon: Icons.badge_outlined,
+                            keyboardType: TextInputType.number,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        CustomTextField(
+                          controller: _addressController,
+                          label: 'Address (Optional)',
+                          icon: Icons.home_outlined,
+                          maxLines: 2,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      CustomTextField(
+                        controller: _emailController,
+                        label: 'Email Address',
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: Validators.validateEmail,
+                      ),
+                      const SizedBox(height: 16),
+                      PasswordField(controller: _passwordController, label: 'Password'),
+                      if (!isLogin) ...[
+                        const SizedBox(height: 16),
+                        PasswordField(
+                          controller: _confirmPasswordController,
+                          label: 'Confirm Password',
+                          validator: (val) => Validators.validateConfirmPassword(val, _passwordController.text),
+                        ),
+                      ],
+                      if (!isLogin) ...[
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: _termsAccepted,
+                              onChanged: (val) => setState(() {
+                                _termsAccepted = val ?? false;
+                                if (_termsAccepted) _showTermsError = false;
+                              }),
+                            ),
+                            const Expanded(child: Text('I agree to the Terms & Conditions and Privacy Policy', style: TextStyle(fontSize: 12))),
+                          ],
+                        ),
+                        if (_showTermsError)
+                          const Padding(padding: EdgeInsets.only(left: 12.0), child: Text('Please accept the terms to continue', style: TextStyle(color: Colors.red, fontSize: 12))),
+                      ],
+                      if (isLogin) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: _rememberMe,
+                                  onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                                ),
+                                const Text('Remember me', style: TextStyle(fontSize: 14)),
+                              ],
+                            ),
+                            TextButton(
+                              onPressed: _showForgotPasswordDialog,
+                              child: const Text('Forgot Password?'),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            backgroundColor: Theme.of(context).primaryColor,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : Text(
+                                  isLogin ? 'Sign In' : 'Create Account',
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
                         ),
                       ),
                     ],
-                  ),
-                  if (_showTermsError)
-                    const Padding(
-                      padding: EdgeInsets.only(left: 12.0),
-                      child: Text(
-                        'You must accept the terms and conditions.',
-                        style: TextStyle(color: Colors.red, fontSize: 12),
-                      ),
-                    ),
-                ],
-
-                const SizedBox(height: 24),
-
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                        )
-                      : Text(
-                          isLogin ? 'Sign In' : 'Create Account',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
+                  ).animate().fade(duration: 600.ms).slideY(begin: 0.1, end: 0),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

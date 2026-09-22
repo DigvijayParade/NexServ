@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../../core/state/app_state.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -39,10 +41,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfile() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    
+    final appState = Provider.of<AppState>(context, listen: false);
+    final data = await appState.getUserData(user.uid);
+    
     if (mounted) {
       setState(() {
-        _data = doc.data() ?? {};
+        _data = data ?? {};
         _nameController.text = _data['name'] ?? '';
         _phoneController.text = _data['phone'] ?? '';
         _addressController.text = _data['address'] ?? '';
@@ -55,7 +60,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     setState(() => _isSaving = true);
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({field: value});
+    if (_data['role'] != null) {
+      String roleStr = _data['role'].toString().toLowerCase();
+      String roleCollection = 'customers';
+      if (roleStr == 'worker') roleCollection = 'workers';
+      if (roleStr.contains('cooperative') || roleStr == 'admin') roleCollection = 'admins';
+      
+      try {
+        await FirebaseFirestore.instance.collection(roleCollection).doc(user.uid).update({field: value});
+      } catch (e) {
+        debugPrint('Profile update failed: $e');
+      }
+    }
     setState(() {
       _data[field] = value;
       _editingField = null;
@@ -238,7 +254,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onPressed: () async {
                     await FirebaseAuth.instance.signOut();
                     if (context.mounted) {
-                      Navigator.pushNamedAndRemoveUntil(context, '/auth', (route) => false);
+                      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
                     }
                   },
                 ),

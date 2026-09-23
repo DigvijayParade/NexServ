@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import '../../../core/state/app_state.dart';
 import '../../../core/config.dart';
@@ -46,93 +47,6 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     }
   }
 
-  void _showOTPDialog(BuildContext context, String jobId, Map<String, dynamic> jobData) {
-    final otpController = TextEditingController();
-    bool isLoading = false;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Enter OTP to Complete Job'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Ask the customer for the 4-digit OTP displayed on their dashboard.', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-              const SizedBox(height: 16),
-              TextField(
-                controller: otpController,
-                keyboardType: TextInputType.number,
-                maxLength: 4,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 24, letterSpacing: 8),
-                decoration: const InputDecoration(hintText: '0000', border: OutlineInputBorder()),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: isLoading ? null : () => _submitOTP(context, jobId, otpController.text, setDialogState),
-              child: isLoading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Submit'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _submitOTP(BuildContext context, String jobId, String otp, Function setDialogState) async {
-    if (otp.length != 4) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a 4-digit OTP')));
-      return;
-    }
-    setDialogState(() => true); // Mock loading state
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-      final token = await user.getIdToken();
-      final response = await http.post(
-        Uri.parse('${Config.apiBaseUrl}/jobs/$jobId/complete'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'otp': otp}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (mounted) {
-          Navigator.pop(context); // Close OTP dialog
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('🎉 Job Completed!'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('You earned: ₹${data["data"]["worker_earnings"].toStringAsFixed(2)}'),
-                  const SizedBox(height: 8),
-                  Text('Cooperative fund: ₹${data["data"]["welfare_contribution"].toStringAsFixed(2)}', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                ],
-              ),
-              actions: [
-                ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('Done')),
-              ],
-            ),
-          );
-        }
-      } else {
-        final data = jsonDecode(response.body);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${data["message"]}'), backgroundColor: Colors.red));
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
-    } finally {
-      setDialogState(() => false);
-    }
-  }
 
   Future<void> _acceptJob(String jobId) async {
     try {
@@ -156,6 +70,9 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
           'updated_at': FieldValue.serverTimestamp(),
         });
       });
+      if (mounted) {
+        Navigator.pushNamed(context, '/activeJob', arguments: jobId);
+      }
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -169,6 +86,43 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
         );
       }
     }
+  }
+
+
+  Widget _buildActiveJobBanner() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const SizedBox.shrink();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .where('assigned_worker_id', isEqualTo: uid)
+          .where('status', whereIn: ['assigned', 'arrived', 'in_progress', 'payment_pending'])
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox.shrink();
+        final job = snapshot.data!.docs.first;
+        final jobId = job.id;
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [Colors.green.shade800, Colors.green.shade500]),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: Colors.green.withOpacity(0.4), blurRadius: 10, offset: const Offset(0, 5))],
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            leading: const Icon(Icons.handshake, color: Colors.white, size: 36),
+            title: const Text('Active Session in Progress', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            subtitle: const Text('Tap to view job details & status', style: TextStyle(color: Colors.white70)),
+            trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white),
+            onTap: () => Navigator.pushNamed(context, '/activeJob', arguments: jobId),
+          ),
+        ).animate().fade().slideY(begin: -0.2, end: 0);
+      },
+    );
   }
 
   Widget _buildEarningsDashboard() {
@@ -270,62 +224,246 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     ).animate().fade(delay: 200.ms).slideX(begin: 0.1, end: 0);
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildRichOfflineState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.green.withOpacity(0.2),
-                ),
-              ).animate(onPlay: (controller) => controller.repeat()).scale(begin: const Offset(1, 1), end: const Offset(1.5, 1.5), duration: 1.5.seconds).fade(end: 0),
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.green.shade400,
-                ),
-                child: const Icon(Icons.radar, color: Colors.white, size: 40),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                shape: BoxShape.circle,
               ),
+              child: const Icon(Icons.bedtime_outlined, size: 80, color: Colors.blueAccent),
+            ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), duration: 2.seconds),
+            const SizedBox(height: 32),
+            const Text(
+              "You are Currently Offline",
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "Flip the switch at the top to go online and start receiving job requests instantly.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600, height: 1.5),
+            ),
+            const SizedBox(height: 40),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [Colors.orange.shade400, Colors.deepOrange]),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.local_fire_department, color: Colors.white, size: 40),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text("High Demand Area!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                        SizedBox(height: 4),
+                        Text("Customers are looking for professionals near you right now.", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ).animate().fade(duration: 500.ms).slideY(begin: 0.2, end: 0),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Old code to ignore:
+  Widget _oldBuildRichOfflineState() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.nightlight_round, size: 80, color: Colors.indigo),
+        const SizedBox(height: 16),
+        const Text("You're Offline", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.indigo)),
+        const SizedBox(height: 8),
+        const Text(
+          "Take a break! When you're ready to earn, just flip the switch above to go online.",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+        const SizedBox(height: 32),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.trending_up, color: Colors.blue, size: 40),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Demand is HIGH in your area!', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                    const SizedBox(height: 4),
+                    Text('Electricians are earning 20% more right now. Go online to catch the wave.', style: TextStyle(fontSize: 12, color: Colors.blue.shade900)),
+                  ],
+                ),
+              )
             ],
           ),
-          const SizedBox(height: 24),
-          const Text(
-            'Scanning for customers...',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
-          ).animate().fade(duration: 1.seconds),
-          const SizedBox(height: 8),
-          const Text(
-            'You are online and visible to customers\nbooking a service.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.black54),
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.refresh),
-            label: const Text('Refresh Jobs'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        ),
+      ],
+    ).animate().fade().scaleXY(begin: 0.9, end: 1.0);
+  }
+
+  Widget _buildDummyJobCard(String service, String name, String address, double fare) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(service, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+                  child: const Text('NEW', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                )
+              ],
             ),
-            onPressed: () {
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Checking for new jobs...'), duration: Duration(seconds: 1)));
-            },
-          ),
-        ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.person, size: 16, color: Colors.grey),
+                const SizedBox(width: 8),
+                Text(name),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                const SizedBox(width: 8),
+                Text(address),
+              ],
+            ),
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Est. Earning', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text('₹$fare', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  ],
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This is a dummy job for demonstration.')));
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
+                  child: const Text('Accept Job'),
+                )
+              ],
+            )
+          ],
+        ),
       ),
-    ).animate().fadeIn(duration: 800.ms);
+    );
+  }
+  
+  Widget _buildEmptyState() { return const SizedBox(); } 
+  Widget _oldBuildEmptyState() {
+    final isOnline = context.watch<AppState>().isWorkerOnline;
+    
+    if (isOnline) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                                  Icon(Icons.check_circle_outline, size: 60, color: Colors.green),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Text('No real jobs match your category.', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('But look at these dummy jobs!', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      ).animate().fade();
+    } else {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.power_settings_new_rounded, size: 80, color: Colors.grey.shade300),
+              const SizedBox(height: 16),
+              const Text('You are offline', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                'Go online to start receiving service requests in your area and earn money.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.online_prediction),
+                label: const Text('GO ONLINE NOW'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                ),
+                onPressed: () {
+                  context.read<AppState>().toggleWorkerStatus();
+                },
+              ),
+              const SizedBox(height: 40),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(16)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.lightbulb_outline, color: Colors.orange),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Pro Tip', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                          const SizedBox(height: 4),
+                          Text('Workers who are online during 9 AM - 12 PM get 40% more jobs!', style: TextStyle(fontSize: 12, color: Colors.orange.shade900)),
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+              )
+            ],
+          ),
+        ),
+      ).animate().fade().slideY(begin: 0.05, end: 0);
+    }
   }
 
   @override
@@ -342,13 +480,18 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.person, color: Colors.white),
             onSelected: (String value) async {
-              if (value == 'Logout') {
+              if (value == 'History') {
+                Navigator.pushNamed(context, '/history');
+              } else if (value == 'Profile') {
+                Navigator.pushNamed(context, '/profile');
+              } else if (value == 'Logout') {
                 await FirebaseAuth.instance.signOut();
                 if (context.mounted) Navigator.pushReplacementNamed(context, '/auth');
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              
+              const PopupMenuItem<String>(value: 'History', child: Text('Job History')),
+              const PopupMenuItem<String>(value: 'Profile', child: Text('My Profile')),
               const PopupMenuItem<String>(value: 'Logout', child: Text('Logout')),
             ],
           ),
@@ -389,6 +532,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        _buildActiveJobBanner(),
                         _buildEarningsDashboard(),
                         _buildAnnouncements(),
                         const SizedBox(height: 24),
@@ -402,11 +546,11 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                           ),
                           constraints: BoxConstraints(minHeight: MediaQuery.of(context).size.height * 0.5),
                           child: !appState.isWorkerOnline
-                              ? const Center(child: Text("Go online to receive job requests.", style: TextStyle(fontSize: 18, color: Colors.grey)))
+                              ? _buildRichOfflineState()
                               : StreamBuilder<QuerySnapshot>(
                                   stream: FirebaseFirestore.instance
                                       .collection('jobs')
-                                      .where('status', whereIn: ['open', 'assigned'])
+                                      .where('status', isEqualTo: 'open')
                                       .where('service_category', isEqualTo: _workerProfession)
                                       .snapshots(),
                                   builder: (context, snapshot) {
@@ -423,9 +567,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                                       }
                                     }
 
-                                    if (nearbyJobs.isEmpty) {
-                                      return _buildEmptyState();
-                                    }
+                                    
 
                                     return Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,15 +613,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                                                         child: const Text('Accept Job'),
                                                       ),
                                                     ),
-                                                  if (job['status'] == 'assigned')
-                                                    SizedBox(
-                                                      width: double.infinity,
-                                                      child: ElevatedButton(
-                                                        onPressed: () => _showOTPDialog(context, job['id'], job),
-                                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                                                        child: const Text('Complete Job (Enter OTP)'),
-                                                      ),
-                                                    )
+
                                                 ],
                                               ),
                                             ),

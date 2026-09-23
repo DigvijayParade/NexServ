@@ -23,13 +23,12 @@ class RoleSelector extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 8.0,
+            runSpacing: 8.0,
             children: UserRole.values.map((role) {
               final isSelected = role == selectedRole;
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: ChoiceChip(
+              return ChoiceChip(
                     label: Text(
                       role.displayName,
                       textAlign: TextAlign.center,
@@ -45,9 +44,7 @@ class RoleSelector extends StatelessWidget {
                       }
                     },
                     selectedColor: Theme.of(context).primaryColor,
-                  ),
-                ),
-              );
+                  );
             }).toList(),
           ),
         ],

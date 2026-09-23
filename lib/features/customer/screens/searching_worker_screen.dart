@@ -5,7 +5,8 @@ import 'live_tracking_screen.dart';
 
 class SearchingWorkerScreen extends StatefulWidget {
   final String jobId;
-  const SearchingWorkerScreen({super.key, required this.jobId});
+  final String? targetWorkerName;
+  const SearchingWorkerScreen({super.key, required this.jobId, this.targetWorkerName});
 
   @override
   State<SearchingWorkerScreen> createState() => _SearchingWorkerScreenState();
@@ -88,13 +89,17 @@ class _SearchingWorkerScreenState extends State<SearchingWorkerScreen> {
                   ],
                 ),
                 const SizedBox(height: 40),
-                const Text(
-                  'Connecting you to a nearby worker...',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                Text(
+                  widget.targetWorkerName != null 
+                      ? 'Sending request to ${widget.targetWorkerName}...' 
+                      : 'Connecting you to a nearby worker...',
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                 ).animate().fade(duration: 800.ms).slideY(begin: 0.2, end: 0),
                 const SizedBox(height: 12),
                 Text(
-                  'Please wait while we broadcast your request.',
+                  widget.targetWorkerName != null
+                      ? 'Please wait while they accept your request.'
+                      : 'Please wait while we broadcast your request.',
                   style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
                 ).animate().fade(delay: 400.ms),
                 const Spacer(),

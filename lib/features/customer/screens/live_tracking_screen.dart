@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../widgets/rating_dialog.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 
 class LiveTrackingScreen extends StatefulWidget {
   final String jobId;
@@ -11,45 +14,86 @@ class LiveTrackingScreen extends StatefulWidget {
 }
 
 class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
-  int _currentStep = 2; // Simulating 'Worker on the way' state
-
-  final List<String> _steps = [
-    'Request Confirmed',
-    'Worker Assigned',
-    'Worker on the way',
-    'Service Completed'
-  ];
+  int _currentStep = 1;
 
   void _showRatingAndComplete() {
-    setState(() => _currentStep = 3);
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => const RatingDialog(),
-    ).then((_) {
-      if (mounted) Navigator.of(context).pushReplacementNamed('/customerHome');
-    });
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, top: 24, left: 24, right: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_circle, color: Colors.green, size: 80),
+            const SizedBox(height: 16),
+            const Text('Job Completed!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text('Rate your professional', style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (i) => const Icon(Icons.star_border, size: 40, color: Colors.orange)),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (mounted) Navigator.popUntil(context, ModalRoute.withName('/customerHome'));
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: const Text('Back to Home'),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
   }
 
-  void _cancelRequest() {
+  void _triggerSOS() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    
+    // In our new schema, customer has em1, em2, em3
+    final data = doc.data() as Map<String, dynamic>;
+    final em1 = data['em1'];
+    final em2 = data['em2'];
+    final em3 = data['em3'];
+    
+    String emergencyPhones = [em1, em2, em3].where((e) => e != null && e.toString().isNotEmpty).join(', ');
+    
+    if (emergencyPhones.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No Emergency Contacts saved in profile!'), backgroundColor: Colors.red));
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cancel Request?'),
-        content: const Text('Are you sure you want to cancel this booking?'),
+        title: const Text('THREAT ALERT', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        content: Text('This will send an emergency SMS with your live location and job details to your emergency contacts:\n$emergencyPhones.\n\nProceed?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('No')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () {
               Navigator.pop(ctx);
-              await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
-                'status': 'cancelled'
-              });
-              if (mounted) Navigator.pop(context); // Go back home
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Emergency alert sent to contacts!'), backgroundColor: Colors.red, duration: const Duration(seconds: 5)));
             },
-            child: const Text('Yes, Cancel'),
-          ),
+            child: const Text('SEND SOS'),
+          )
         ],
       ),
     );
@@ -59,7 +103,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Live Tracking'),
+        title: const Text('Job Session'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 1,
@@ -71,13 +115,36 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           final jobData = jobSnapshot.data!.data() as Map<String, dynamic>;
-          final workerId = jobData['assigned_worker_id'];
+          final workerId = jobData['assigned_worker_id'] ?? jobData['worker_id'];
           final status = jobData['status'];
 
           if (status == 'completed' && _currentStep != 3) {
+            _currentStep = 3;
             WidgetsBinding.instance.addPostFrameCallback((_) {
                _showRatingAndComplete();
             });
+          }
+
+          String topMessage = 'Waiting for professional...';
+          IconData topIcon = Icons.map;
+          Color topColor = Colors.grey;
+          
+          if (status == 'arrived') {
+            topMessage = 'Professional has arrived at your location!';
+            topIcon = Icons.location_on;
+            topColor = Colors.orange;
+          } else if (status == 'in_progress') {
+            topMessage = 'Work is currently in progress.';
+            topIcon = Icons.build;
+            topColor = Colors.blue;
+          } else if (status == 'payment_pending') {
+            topMessage = 'Job is Done! Payment Required.';
+            topIcon = Icons.payment;
+            topColor = Colors.green;
+          } else if (status == 'completed') {
+            topMessage = 'Service Completed!';
+            topIcon = Icons.check_circle;
+            topColor = Colors.green.shade800;
           }
 
           return StreamBuilder<DocumentSnapshot>(
@@ -85,10 +152,16 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             builder: (context, workerSnapshot) {
               String workerName = "Worker";
               String workerPhone = "";
+              Uint8List? imageBytes;
+              
               if (workerSnapshot.hasData && workerSnapshot.data!.exists) {
                 final workerData = workerSnapshot.data!.data() as Map<String, dynamic>;
                 workerName = workerData['name'] ?? "Worker";
                 workerPhone = workerData['phone'] ?? "";
+                final img = workerData['profile_image_base64'];
+                if (img != null && img.isNotEmpty) {
+                  try { imageBytes = base64Decode(img); } catch(_) {}
+                }
               }
 
               return Column(
@@ -96,15 +169,14 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   Expanded(
                     flex: 2,
                     child: Container(
-                      color: Colors.grey.shade300,
+                      color: Colors.grey.shade200,
                       child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.map, size: 60, color: Colors.grey),
+                            Icon(topIcon, size: 60, color: topColor),
                             const SizedBox(height: 16),
-                            const Text('Live Map Integration Pending'),
-                            Text('Tracking $workerName to your location...'),
+                            Text(topMessage, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: topColor)),
                           ],
                         ),
                       ),
@@ -127,7 +199,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                               CircleAvatar(
                                 radius: 25,
                                 backgroundColor: Colors.teal.shade100,
-                                child: const Icon(Icons.person, color: Colors.teal),
+                                backgroundImage: imageBytes != null ? MemoryImage(imageBytes) : null,
+                                child: imageBytes == null ? const Icon(Icons.person, color: Colors.teal) : null,
                               ),
                               const SizedBox(width: 16),
                               Expanded(
@@ -135,7 +208,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(workerName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                    Text('4.9 -? (120+ jobs)', style: TextStyle(color: Colors.grey.shade600)),
+                                    Text('Verified Professional', style: TextStyle(color: Colors.grey.shade600)),
                                   ],
                                 ),
                               ),
@@ -143,12 +216,19 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                                 children: [
                                   IconButton(
                                     icon: const Icon(Icons.call, color: Colors.green),
-                                    onPressed: () {},
+                                    onPressed: () async {
+                                      if (workerPhone.isNotEmpty) {
+                                        final Uri launchUri = Uri(scheme: 'tel', path: workerPhone);
+                                        await launchUrl(launchUri);
+                                      }
+                                    },
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.chat, color: Colors.blue),
-                                    onPressed: () {},
-                                  ),
+                                  // ONLY SHOW SOS IF IN PROGRESS OR PENDING PAYMENT
+                                  if (status == 'in_progress' || status == 'payment_pending')
+                                    IconButton(
+                                      icon: const Icon(Icons.warning, color: Colors.red),
+                                      onPressed: _triggerSOS,
+                                    ),
                                 ],
                               ),
                             ],
@@ -156,44 +236,76 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                           const SizedBox(height: 20),
                           const Divider(),
                           const SizedBox(height: 16),
-                          const Text('OTP for Service Completion:', style: TextStyle(color: Colors.grey)),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.black,
-                              borderRadius: BorderRadius.circular(8),
+                          
+                          if (status == 'arrived') ...[
+                            const Text('The professional has marked that they arrived.', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () async {
+                                      await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({'status': 'in_progress'});
+                                    },
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                                    child: const Text('Approve'),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () async {
+                                      await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
+                                        'status': 'cancelled',
+                                        'cancelled_by': 'customer_disapproved_arrival',
+                                        'cancelled_at': FieldValue.serverTimestamp()
+                                      });
+                                      if (workerId != null) {
+                                        await FirebaseFirestore.instance.collection('users').doc(workerId).update({
+                                          'strike_count': FieldValue.increment(1)
+                                        });
+                                      }
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Arrival Disapproved! Worker has been penalized and job is cancelled.'), backgroundColor: Colors.red));
+                                        Navigator.popUntil(context, ModalRoute.withName('/customerHome'));
+                                      }
+                                    },
+                                    style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+                                    child: const Text('Disapprove'),
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: const Text('1 2 3 4', style: TextStyle(color: Colors.white, fontSize: 24, letterSpacing: 8, fontWeight: FontWeight.bold)),
-                          ),
-                          const Spacer(),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: _cancelRequest,
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.red,
-                                    side: const BorderSide(color: Colors.red),
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                  ),
-                                  child: const Text('Cancel Request'),
+                          ],
+                          
+                          if (status == 'in_progress') ...[
+                            const Center(
+                              child: Text('Work in Progress...', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 18)),
+                            ),
+                            const Spacer(),
+                            const Text('Waiting for the professional to mark the job as done.', style: TextStyle(color: Colors.grey)),
+                          ],
+
+                          if (status == 'payment_pending') ...[
+                            const Text('Job is Finished! Please hand over the cash to the professional.', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+                            const Spacer(),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  // Customer marks payment as done
+                                  await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({'payment_status': 'paid'});
+                                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Waiting for professional to approve payment...'), backgroundColor: Colors.green));
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: jobData['payment_status'] == 'paid' ? Colors.grey : Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
                                 ),
+                                child: Text(jobData['payment_status'] == 'paid' ? 'Waiting for Worker to Verify...' : 'Payment Done (Cash)'),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () {},
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.black,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                  ),
-                                  child: const Text('Pay Now'),
-                                ),
-                              ),
-                            ],
-                          )
+                            ),
+                          ]
                         ],
                       ),
                     ),
@@ -202,7 +314,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               );
             }
           );
-        }
+        },
       ),
     );
   }

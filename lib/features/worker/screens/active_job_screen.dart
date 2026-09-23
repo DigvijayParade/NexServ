@@ -1,250 +1,219 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ActiveJobScreen extends StatefulWidget {
-  const ActiveJobScreen({super.key});
+  final String? jobId;
+  const ActiveJobScreen({super.key, this.jobId});
 
   @override
   State<ActiveJobScreen> createState() => _ActiveJobScreenState();
 }
 
 class _ActiveJobScreenState extends State<ActiveJobScreen> {
-  final _otpController = TextEditingController();
-  final _partsController = TextEditingController();
-  
-  bool _isStarted = false;
-  bool _isCompleted = false;
-  double _extraPartsCost = 0.0;
-  final double _baseFare = 299.0;
-  late String _generatedOtp;
 
-  @override
-  void initState() {
-    super.initState();
-    // Generate a random 4-digit OTP for this job session
-    _generatedOtp = (1000 + Random().nextInt(9000)).toString();
+  Future<void> _updateJobStatus(String newStatus) async {
+    if (widget.jobId == null) return;
+    final data = {
+      'status': newStatus,
+      'updated_at': FieldValue.serverTimestamp(),
+    };
+    if (newStatus == 'arrived') data['arrived_at'] = FieldValue.serverTimestamp();
+    await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update(data);
   }
 
-  @override
-  void dispose() {
-    _otpController.dispose(); // BUG FIX #4: Missing dispose calls
-    _partsController.dispose();
-    super.dispose();
-  }
-
-  void _verifyOTP() {
-    if (_otpController.text == _generatedOtp) {
-      setState(() {
-        _isStarted = true;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('OTP Verified. Service Started.'), backgroundColor: Colors.green),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid OTP! Ask customer for 4-digit code.'), backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  void _completeService() {
-    setState(() {
-      _extraPartsCost = double.tryParse(_partsController.text) ?? 0.0;
-      _isCompleted = true;
+  Future<void> _completePaymentAndJob() async {
+    if (widget.jobId == null) return;
+    await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
+      'status': 'completed',
+      'completed_at': FieldValue.serverTimestamp(),
     });
+    if (mounted) {
+      Navigator.popUntil(context, ModalRoute.withName('/workerHome'));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    double total = _baseFare + _extraPartsCost;
-    double welfareDeduction = total * 0.03; // 3%
-    double finalPayout = total - welfareDeduction;
+    if (widget.jobId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Active Session')),
+        body: const Center(child: Text('No Job ID Provided')),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Active Job'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (_isStarted && !_isCompleted) {
-               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Please complete the job before leaving!')),
-              );
-            } else {
-              Navigator.pop(context);
-            }
-          },
-        ),
+        title: const Text('Active Session'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              elevation: 4,
-              child: Padding(
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).snapshots(),
+        builder: (context, jobSnapshot) {
+          if (!jobSnapshot.hasData || !jobSnapshot.data!.exists) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final jobData = jobSnapshot.data!.data() as Map<String, dynamic>;
+          final customerId = jobData['customer_id'];
+          final status = jobData['status'];
+          final paymentStatus = jobData['payment_status'] ?? 'pending';
+
+          return StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance.collection('users').doc(customerId).get().asStream(),
+            builder: (context, customerSnapshot) {
+              String customerName = "Customer";
+              String customerPhone = "";
+              if (customerSnapshot.hasData && customerSnapshot.data!.exists) {
+                final customerData = customerSnapshot.data!.data() as Map<String, dynamic>;
+                customerName = customerData['name'] ?? "Customer";
+                customerPhone = customerData['phone'] ?? "";
+              }
+
+              return Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ListTile(
-                      leading: const CircleAvatar(
-                        backgroundColor: Color(0xFF0F5A47),
-                        child: Icon(Icons.person, color: Colors.white),
-                      ),
-                      title: const Text('Customer'),
-                      subtitle: const Text('Address on file'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.call, color: Colors.green),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Calling customer...')),
-                          );
-                        },
+                    // CUSTOMER DETAILS CARD
+                    Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Customer Details', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: Colors.teal.shade700,
+                                  child: const Icon(Icons.person, color: Colors.white),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                      Text(customerPhone, style: TextStyle(color: Colors.grey.shade600)),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.call, color: Colors.green),
+                                  onPressed: () async {
+                                    if (customerPhone.isNotEmpty) {
+                                      final Uri launchUri = Uri(scheme: 'tel', path: customerPhone);
+                                      await launchUrl(launchUri);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const Divider(),
-                    const Text('Electrician - Fan Repair', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
-                    if (!_isStarted) ...[
-                      const Text('Enter 4-Digit OTP to Start Service'),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _otpController,
-                              keyboardType: TextInputType.number,
-                              maxLength: 4,
-                              decoration: InputDecoration(
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                hintText: '4-digit OTP',
-                                counterText: '', // BUG FIX #5: Hide ugly counter text under OTP field
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            onPressed: _verifyOTP,
-                            child: const Text('Verify & Start', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                    ] else if (!_isCompleted) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.timer, color: Colors.green),
-                            SizedBox(width: 8),
-                            Text('Service In Progress', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 18)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      TextField(
-                        controller: _partsController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Extra Parts Cost (₹)',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          prefixIcon: const Icon(Icons.currency_rupee),
-                          hintText: '0',
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        onPressed: _completeService,
-                        child: const Text('Generate Final Bill & Complete', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      ),
-                    ] else ...[
-                      const Icon(Icons.check_circle, color: Colors.green, size: 64),
-                      const SizedBox(height: 8),
-                      const Text('Job Completed Successfully!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
+                    
+                    // JOB DETAILS CARD
+                    Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildBillRow('Base Fare', '₹${_baseFare.toStringAsFixed(2)}'),
+                            Text('Job Description', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                             const SizedBox(height: 8),
-                            _buildBillRow('Extra Parts', '₹${_extraPartsCost.toStringAsFixed(2)}'),
+                            Text(jobData['issue_description'] ?? 'No description provided.', style: const TextStyle(fontSize: 16)),
                             const Divider(),
-                            _buildBillRow('Total Bill (To Collect)', '₹${total.toStringAsFixed(2)}', isBold: true),
-                            const SizedBox(height: 16),
-                            _buildBillRow('Coop Welfare (3%)', '- ₹${welfareDeduction.toStringAsFixed(2)}', color: Colors.red),
-                            const Divider(),
-                            _buildBillRow('Your Net Payout', '₹${finalPayout.toStringAsFixed(2)}', isBold: true, color: Colors.green, fontSize: 16),
+                            Text('Address: ${jobData['address'] ?? 'Customer Address'}', style: const TextStyle(fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 8),
+                            Text('Category: ${jobData['service_category']}', style: TextStyle(color: Colors.teal.shade700, fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    
+                    const SizedBox(height: 24),
+                    const Text('Job Status', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+
+                    // BUTTON LOCK LOGIC
+                    if (status == 'assigned') ...[
+                      const Text('Travel to the customer\'s location and press Arrived.', style: TextStyle(color: Colors.grey)),
+                      const Spacer(),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => _updateJobStatus('arrived'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+                          child: const Text('Arrived at destination', style: TextStyle(fontSize: 18)),
                         ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        child: const Text('Return to Dashboard', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      )
+                      ),
+                    ] 
+                    else if (status == 'arrived') ...[
+                      const Center(child: Text('Waiting for Customer to approve your arrival...', style: TextStyle(color: Colors.orange, fontSize: 16, fontWeight: FontWeight.bold))),
+                      const Spacer(),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: null, // LOCKED
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.grey, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+                          child: const Text('Job is Done (Locked)'),
+                        ),
+                      ),
+                    ]
+                    else if (status == 'in_progress') ...[
+                      const Center(child: Text('Work in progress.', style: TextStyle(color: Colors.blue, fontSize: 16, fontWeight: FontWeight.bold))),
+                      const Spacer(),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => _updateJobStatus('payment_pending'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+                          child: const Text('Job is Done', style: TextStyle(fontSize: 18)),
+                        ),
+                      ),
+                    ]
+                    else if (status == 'payment_pending') ...[
+                      if (paymentStatus == 'paid') ...[
+                        const Center(child: Text('Customer marked Payment as Done!', style: TextStyle(color: Colors.green, fontSize: 16, fontWeight: FontWeight.bold))),
+                        const Spacer(),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _completePaymentAndJob,
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+                            child: const Text('Approve Payment & Finish', style: TextStyle(fontSize: 18)),
+                          ),
+                        ),
+                      ] else ...[
+                        const Center(child: Text('Waiting for Customer to make Payment...', style: TextStyle(color: Colors.orange, fontSize: 16, fontWeight: FontWeight.bold))),
+                        const Spacer(),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: null, // LOCKED
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
+                            child: const Text('Approve Payment (Locked)'),
+                          ),
+                        ),
+                      ]
                     ]
                   ],
                 ),
-              ),
-            ),
-          ],
-        ),
+              );
+            }
+          );
+        },
       ),
-    );
-  }
-
-  // BUG FIX #6: Extracted bill row widget to prevent very long Row lines that could overflow on narrow screens
-  Widget _buildBillRow(String label, String value, {bool isBold = false, Color? color, double fontSize = 14}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Flexible(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              color: color,
-              fontSize: fontSize,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            color: color,
-            fontSize: fontSize,
-          ),
-        ),
-      ],
     );
   }
 }

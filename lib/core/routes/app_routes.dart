@@ -4,6 +4,8 @@ import '../../features/auth/screens/auth_screen.dart';
 import '../../features/customer/screens/customer_home_screen.dart';
 import '../../features/customer/screens/live_tracking_screen.dart';
 import '../../features/admin/screens/admin_dashboard_screen.dart';
+import '../../features/profile/screens/edit_profile_screen.dart';
+import '../../features/history/screens/job_history_screen.dart';
 import '../../features/worker/screens/worker_home_screen.dart';
 import '../../features/worker/screens/active_job_screen.dart';
 
@@ -30,13 +32,21 @@ class AppRoutes {
         page = const AdminDashboardScreen();
         break;
       case liveTracking:
-        page = const LiveTrackingScreen();
+        final jobId = settings.arguments as String? ?? 'dummy_job_id';
+        page = LiveTrackingScreen(jobId: jobId);
         break;
       case workerHome:
         page = const WorkerHomeScreen();
         break;
       case activeJob:
-        page = const ActiveJobScreen();
+        final jobId = settings.arguments as String?;
+        page = ActiveJobScreen(jobId: jobId);
+        break;
+      case '/history':
+        page = const JobHistoryScreen();
+        break;
+      case '/profile':
+        page = const EditProfileScreen();
         break;
       default:
         page = const AuthScreen();

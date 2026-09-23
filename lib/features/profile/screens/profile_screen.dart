@@ -241,6 +241,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Divider(),
                   _buildReadOnlyRow(Icons.build_outlined, 'Profession', _data['service_category']),
                 ],
+                if (_data['e_shram_id'] != null && _data['e_shram_id'].toString().isNotEmpty) ...[
+                  const Divider(),
+                  _buildReadOnlyRow(Icons.badge_outlined, 'e-Shram ID (UAN)', _data['e_shram_id']),
+                ],
                 const SizedBox(height: 40),
                 ElevatedButton.icon(
                   icon: const Icon(Icons.logout),

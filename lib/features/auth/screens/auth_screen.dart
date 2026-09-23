@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -26,6 +29,9 @@ class _AuthScreenState extends State<AuthScreen> {
   final _emailController = TextEditingController();
   final _mobileController = TextEditingController();
   final _addressController = TextEditingController();
+  final _em1Controller = TextEditingController();
+  final _em2Controller = TextEditingController();
+  final _em3Controller = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _aadhaarController = TextEditingController();
@@ -50,6 +56,9 @@ class _AuthScreenState extends State<AuthScreen> {
     _emailController.dispose();
     _mobileController.dispose();
     _addressController.dispose();
+    _em1Controller.dispose();
+    _em2Controller.dispose();
+    _em3Controller.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _aadhaarController.dispose();
@@ -134,7 +143,8 @@ class _AuthScreenState extends State<AuthScreen> {
           name: _fullNameController.text.isNotEmpty ? _fullNameController.text : null,
           phone: _mobileController.text.isNotEmpty ? _mobileController.text : null,
           profession: _selectedProfession,
-          address: _addressController.text.isNotEmpty ? _addressController.text : null,
+          address: _addressController.text.trim(),
+            emergencyContact: '${_em1Controller.text.trim()}, ${_em2Controller.text.trim()}, ${_em3Controller.text.trim()}',
         );
 
         if (mounted) {
@@ -255,20 +265,21 @@ class _AuthScreenState extends State<AuthScreen> {
                         CustomTextField(
                           controller: _fullNameController,
                           label: 'Full Name',
-                          icon: Icons.person_outline,
-                          validator: Validators.validateName,
+                          prefixIcon: const Icon(Icons.person_outline),
+                          validator: Validators.validateFullName,
                         ),
                         const SizedBox(height: 16),
                         CustomTextField(
                           controller: _mobileController,
                           label: 'Mobile Number',
-                          icon: Icons.phone_android,
+                          prefixIcon: const Icon(Icons.phone_android),
                           keyboardType: TextInputType.phone,
-                          validator: Validators.validatePhone,
+                          validator: Validators.validateMobileNumber,
                         ),
                         const SizedBox(height: 16),
                         if (_selectedRole == UserRole.worker) ...[
                           DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: _selectedProfession,
                             decoration: const InputDecoration(
                               labelText: 'Primary Profession',
@@ -281,24 +292,69 @@ class _AuthScreenState extends State<AuthScreen> {
                           const SizedBox(height: 16),
                           CustomTextField(
                             controller: _aadhaarController,
-                            label: 'Aadhaar ID (for KYC)',
-                            icon: Icons.badge_outlined,
+                            label: 'e-Shram ID (UAN)',
+                            prefixIcon: const Icon(Icons.badge_outlined),
                             keyboardType: TextInputType.number,
                           ),
                           const SizedBox(height: 16),
                         ],
                         CustomTextField(
                           controller: _addressController,
-                          label: 'Address (Optional)',
-                          icon: Icons.home_outlined,
+                          label: 'Service Address',
+                          prefixIcon: const Icon(Icons.home_outlined),
                           maxLines: 2,
                         ),
                         const SizedBox(height: 16),
+                        if (_selectedRole == UserRole.customer) ...[
+                          const Text('Family/Close Friends (For SOS)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                            const SizedBox(height: 8),
+                            CustomTextField(
+                              controller: _em1Controller,
+                              label: 'Emergency Contact 1',
+                              prefixIcon: const Icon(Icons.contact_emergency),
+                              keyboardType: TextInputType.phone,
+                              validator: (val) {
+                                final res = Validators.validateMobileNumber(val);
+                                if (res != null) return res;
+                                if (val == _mobileController.text) return 'Cannot be your own number';
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            CustomTextField(
+                              controller: _em2Controller,
+                              label: 'Emergency Contact 2',
+                              prefixIcon: const Icon(Icons.contact_emergency),
+                              keyboardType: TextInputType.phone,
+                              validator: (val) {
+                                final res = Validators.validateMobileNumber(val);
+                                if (res != null) return res;
+                                if (val == _mobileController.text) return 'Cannot be your own number';
+                                if (val == _em1Controller.text) return 'Must be unique';
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            CustomTextField(
+                              controller: _em3Controller,
+                              label: 'Emergency Contact 3',
+                              prefixIcon: const Icon(Icons.contact_emergency),
+                              keyboardType: TextInputType.phone,
+                              validator: (val) {
+                                final res = Validators.validateMobileNumber(val);
+                                if (res != null) return res;
+                                if (val == _mobileController.text) return 'Cannot be your own number';
+                                if (val == _em1Controller.text || val == _em2Controller.text) return 'Must be unique';
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                       ],
                       CustomTextField(
                         controller: _emailController,
                         label: 'Email Address',
-                        icon: Icons.email_outlined,
+                        prefixIcon: const Icon(Icons.email_outlined),
                         keyboardType: TextInputType.emailAddress,
                         validator: Validators.validateEmail,
                       ),
@@ -330,23 +386,27 @@ class _AuthScreenState extends State<AuthScreen> {
                           const Padding(padding: EdgeInsets.only(left: 12.0), child: Text('Please accept the terms to continue', style: TextStyle(color: Colors.red, fontSize: 12))),
                       ],
                       if (isLogin) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: _rememberMe,
-                                  onChanged: (val) => setState(() => _rememberMe = val ?? false),
-                                ),
-                                const Text('Remember me', style: TextStyle(fontSize: 14)),
-                              ],
-                            ),
-                            TextButton(
-                              onPressed: _showForgotPasswordDialog,
-                              child: const Text('Forgot Password?'),
-                            ),
-                          ],
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _rememberMe,
+                                    onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                                  ),
+                                  const Text('Remember me', style: TextStyle(fontSize: 14)),
+                                ],
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                onPressed: _showForgotPasswordDialog,
+                                child: const Text('Forgot Password?'),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                       const SizedBox(height: 24),

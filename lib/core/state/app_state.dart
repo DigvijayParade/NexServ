@@ -46,6 +46,7 @@ class AppState extends ChangeNotifier {
     String? phone,
     String? profession,
     String? address,
+    String? emergencyContact,
   }) async {
     _activeRole = role;
     notifyListeners();
@@ -69,9 +70,14 @@ class AppState extends ChangeNotifier {
           'phone': phone ?? '',
           'name': name ?? '',
           'address': address ?? '',
+          'emergency_contact': emergencyContact ?? '',
           'service_category': profession,
           'created_at': FieldValue.serverTimestamp(),
         };
+        
+        // Also save to global 'users' collection so we can find them easily regardless of role
+        await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set(userData);
+        
         
         // Save exclusively to role-specific collections (customers, workers, admins)
         String roleCollection = 'customers';

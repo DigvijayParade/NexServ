@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +10,35 @@ import 'dart:typed_data';
 class LiveTrackingScreen extends StatefulWidget {
   final String jobId;
   const LiveTrackingScreen({super.key, required this.jobId});
+
+
+  Widget _buildPhotoThumbnail(String label, String? url) {
+    return Column(
+      children: [
+        Container(
+          width: 70,
+          height: 70,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: (url != null && url.isNotEmpty) 
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(8), 
+                  child: Image.memory(
+                    base64Decode(url),
+                    fit: BoxFit.cover,
+                    errorBuilder: (c,e,s) => const Icon(Icons.broken_image, color: Colors.grey)
+                  )
+                )
+              : const Icon(Icons.photo_camera_outlined, color: Colors.grey),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
 
   @override
   State<LiveTrackingScreen> createState() => _LiveTrackingScreenState();
@@ -168,18 +199,80 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                 children: [
                   Expanded(
                     flex: 2,
-                    child: Container(
-                      color: Colors.grey.shade200,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(topIcon, size: 60, color: topColor),
-                            const SizedBox(height: 16),
-                            Text(topMessage, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: topColor)),
-                          ],
+                    child: Stack(
+                      children: [
+                        StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).collection('location_pings').orderBy('timestamp', descending: true).limit(1).snapshots(),
+                          builder: (context, mapSnap) {
+                            if (!mapSnap.hasData || mapSnap.data!.docs.isEmpty) {
+                              return Container(
+                                color: Colors.grey.shade200,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(topIcon, size: 60, color: topColor),
+                                      const SizedBox(height: 16),
+                                      Text(topMessage, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: topColor)),
+                                      const SizedBox(height: 8),
+                                      const Text('Waiting for GPS connection...', style: TextStyle(color: Colors.grey)),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+                            
+                            final posData = mapSnap.data!.docs.first.data() as Map<String, dynamic>;
+                            final lat = posData['lat'] as double;
+                            final lng = posData['lng'] as double;
+                            
+                            return FlutterMap(
+                              options: MapOptions(
+                                initialCenter: LatLng(lat, lng),
+                                initialZoom: 16.0,
+                              ),
+                              children: [
+                                TileLayer(
+                                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                  userAgentPackageName: 'com.example.coop_gig_app',
+                                ),
+                                MarkerLayer(
+                                  markers: [
+                                    Marker(
+                                      point: LatLng(lat, lng),
+                                      width: 50,
+                                      height: 50,
+                                      child: const Icon(Icons.engineering, color: Colors.blue, size: 40),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
                         ),
-                      ),
+                        
+                        // Status badge overlay
+                        Positioned(
+                          top: 16,
+                          left: 16,
+                          right: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 8)],
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(topIcon, color: topColor, size: 24),
+                                const SizedBox(width: 12),
+                                Expanded(child: Text(topMessage, style: TextStyle(fontWeight: FontWeight.bold, color: topColor))),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Expanded(

@@ -3,188 +3,167 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
-class AdminDashboardScreen extends StatelessWidget {
+class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
+
+  @override
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  int _selectedIndex = 0;
+
+  final List<Widget> _pages = [
+    const AdminOverviewTab(),
+    const AdminDisputesTab(),
+    const AdminUsersTab(),
+    const AdminFinancialsTab(),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Admin Command Center', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.5)),
+        title: const Text('Admin Command Center', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
         centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
+            icon: const Icon(Icons.logout),
             onPressed: () async {
               await FirebaseAuth.instance.signOut();
-              if (context.mounted) Navigator.pushReplacementNamed(context, '/auth');
+              if (context.mounted) Navigator.pushReplacementNamed(context, '/');
             },
           )
         ],
       ),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Image.asset('assets/images/admin_premium_bg.jpg', fit: BoxFit.cover),
-          ),
-          Positioned.fill(
-            child: Container(color: Colors.black.withOpacity(0.5)),
-          ),
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildStatCardsRow().animate().fade(duration: 500.ms).slideY(begin: -0.2, end: 0),
-                  const SizedBox(height: 32),
-                  const Text('System Management', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 1.2)).animate().fade(delay: 200.ms),
-                  const SizedBox(height: 16),
-                  _buildManagementGrid(context).animate().fade(delay: 400.ms).slideY(begin: 0.1, end: 0),
-                  const SizedBox(height: 32),
-                  _buildRecentActivity().animate().fade(delay: 600.ms).slideY(begin: 0.1, end: 0),
-                ],
-              ),
-            ),
-          )
+      body: _pages[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.black,
+        selectedItemColor: Colors.blueAccent,
+        unselectedItemColor: Colors.grey.shade600,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Overview'),
+          BottomNavigationBarItem(icon: Icon(Icons.gavel), label: 'Disputes'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Users'),
+          BottomNavigationBarItem(icon: Icon(Icons.attach_money), label: 'Finance'),
         ],
       ),
     );
   }
+}
 
-  Widget _buildStatCardsRow() {
-    return Row(
-      children: [
-        Expanded(child: _buildGlassCard('Total Users', 'users', Icons.people, Colors.blue)),
-        const SizedBox(width: 16),
-        Expanded(child: _buildGlassCard('Active Jobs', 'jobs', Icons.work, Colors.orange)),
-      ],
-    );
-  }
+// ----------------------------------------------------------------------
+// TAB 1: OVERVIEW
+// ----------------------------------------------------------------------
+class AdminOverviewTab extends StatelessWidget {
+  const AdminOverviewTab({super.key});
 
-  Widget _buildGlassCard(String title, String collection, IconData icon, Color accentColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
-        boxShadow: [BoxShadow(color: accentColor.withOpacity(0.1), blurRadius: 20, spreadRadius: 2)],
-      ),
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, color: accentColor, size: 28),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: accentColor.withOpacity(0.2), shape: BoxShape.circle),
-                child: const Icon(Icons.arrow_upward, color: Colors.white, size: 12),
-              )
+              Expanded(child: _buildStatCard('Total Users', 'users', Icons.people, Colors.blue)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildStatCard('Active Jobs', 'jobs', Icons.work, Colors.orange)),
             ],
-          ),
+          ).animate().fade().slideY(),
+          const SizedBox(height: 24),
+          const Text('Live System Logs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection(collection).snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) return const CircularProgressIndicator();
-              return Text(
-                '${snapshot.data!.docs.length}',
-                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
-              );
-            },
-          ),
-          const SizedBox(height: 4),
-          Text(title, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14)),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.security, color: Colors.green),
+              title: const Text('Platform running securely.'),
+              subtitle: const Text('Just now'),
+            ),
+          ).animate().fade(delay: 200.ms),
         ],
       ),
     );
   }
 
-  Widget _buildManagementGrid(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 1.5,
-      children: [
-        _buildActionTile(context, 'Manage Customers', Icons.manage_accounts, Colors.teal, '/admin/customers'),
-        _buildActionTile(context, 'Manage Workers', Icons.engineering, Colors.indigo, '/admin/workers'),
-      ],
-    );
-  }
-
-  Widget _buildActionTile(BuildContext context, String title, IconData icon, Color color, String routeName) {
-    return InkWell(
-      onTap: () {
-        // Navigator.pushNamed(context, routeName);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Module coming soon...')));
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [color.withOpacity(0.8), color.withOpacity(0.4)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
-        ),
+  Widget _buildStatCard(String title, String collection, IconData icon, Color color) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Colors.white, size: 32),
-            const SizedBox(height: 8),
-            Text(title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Icon(icon, size: 32, color: color),
+            const SizedBox(height: 12),
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection(collection).snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const CircularProgressIndicator();
+                return Text('${snapshot.data!.docs.length}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold));
+              },
+            ),
+            const SizedBox(height: 4),
+            Text(title, style: const TextStyle(color: Colors.grey)),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildRecentActivity() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
+// ----------------------------------------------------------------------
+// TAB 2: ACTIVE DISPUTES
+// ----------------------------------------------------------------------
+class AdminDisputesTab extends StatelessWidget {
+  const AdminDisputesTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Container(padding: const EdgeInsets.all(6), decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle), child: const Icon(Icons.sensors, color: Colors.white, size: 16)),
-              const SizedBox(width: 8),
-              const Text('Live System Logs', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-            ],
+          Icon(Icons.gavel, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          const Text('Dispute Resolution Center', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 32.0),
+            child: Text('Customer claims and proof of work photos will appear here when a dispute is filed.', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
           ),
-          const SizedBox(height: 20),
-          _buildLogItem('New Worker Registered', '2 mins ago', Colors.green),
-          _buildLogItem('Electrician Job Completed', '15 mins ago', Colors.blue),
-          _buildLogItem('Customer feedback received', '1 hour ago', Colors.amber),
         ],
       ),
     );
   }
-  
-  Widget _buildLogItem(String message, String time, Color dotColor) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Row(
-        children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
-          const SizedBox(width: 12),
-          Expanded(child: Text(message, style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14))),
-          Text(time, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
-        ],
-      ),
-    );
+}
+
+// ----------------------------------------------------------------------
+// TAB 3: USER MANAGEMENT
+// ----------------------------------------------------------------------
+class AdminUsersTab extends StatelessWidget {
+  const AdminUsersTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: Text('User Management Data', style: TextStyle(color: Colors.grey)));
+  }
+}
+
+// ----------------------------------------------------------------------
+// TAB 4: FINANCIALS
+// ----------------------------------------------------------------------
+class AdminFinancialsTab extends StatelessWidget {
+  const AdminFinancialsTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: Text('Co-op Welfare Pool & Financials', style: TextStyle(color: Colors.grey)));
   }
 }

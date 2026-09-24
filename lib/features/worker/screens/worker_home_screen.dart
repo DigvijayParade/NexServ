@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../profile/screens/edit_profile_screen.dart';
+import '../../history/screens/job_history_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,6 +20,7 @@ class WorkerHomeScreen extends StatefulWidget {
 }
 
 class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
+  int _selectedIndex = 0;
   String _workerProfession = '';
   bool _isLoadingProfile = true;
 
@@ -466,8 +469,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildHomeTab(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     
     return Scaffold(
@@ -477,23 +479,12 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
         backgroundColor: Colors.transparent,
         title: const Text('Dashboard', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.person, color: Colors.white),
-            onSelected: (String value) async {
-              if (value == 'History') {
-                Navigator.pushNamed(context, '/history');
-              } else if (value == 'Profile') {
-                Navigator.pushNamed(context, '/profile');
-              } else if (value == 'Logout') {
-                await FirebaseAuth.instance.signOut();
-                if (context.mounted) Navigator.pushReplacementNamed(context, '/auth');
-              }
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) Navigator.pushReplacementNamed(context, '/auth');
             },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(value: 'History', child: Text('Job History')),
-              const PopupMenuItem<String>(value: 'Profile', child: Text('My Profile')),
-              const PopupMenuItem<String>(value: 'Logout', child: Text('Logout')),
-            ],
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
@@ -630,6 +621,33 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                   ),
                 ),
           ),
+        ],
+      ),
+    );
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Widget> pages = [
+      _buildHomeTab(context),
+      JobHistoryScreen(),
+      EditProfileScreen(),
+    ];
+
+    return Scaffold(
+      body: pages[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.black,
+        selectedItemColor: Colors.greenAccent,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.work), label: 'Jobs'),
+          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Earnings'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );

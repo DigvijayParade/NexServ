@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
@@ -20,6 +22,25 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final dbRole = userDoc.data()?['role'] ?? 'customer';
+        if (dbRole == 'worker') {
+          if (mounted) Navigator.pushReplacementNamed(context, '/workerHome');
+        } else if (dbRole == 'admin' || dbRole.contains('cooperative')) {
+          if (mounted) Navigator.pushReplacementNamed(context, '/adminDashboard');
+        } else {
+          if (mounted) Navigator.pushReplacementNamed(context, '/customerHome');
+        }
+      }
+    });
+  }
+
   final _formKey = GlobalKey<FormState>();
   
   AuthMode _authMode = AuthMode.signIn;
@@ -148,6 +169,15 @@ class _AuthScreenState extends State<AuthScreen> {
         );
 
         if (mounted) {
+          // If signing in, override the selected role with their actual database role so they don't get misrouted!
+          if (_authMode == AuthMode.signIn) {
+            final userDoc = await FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).get();
+            final dbRole = userDoc.data()?['role'] ?? 'customer';
+            if (dbRole == 'worker') _selectedRole = UserRole.worker;
+            else if (dbRole == 'admin' || dbRole.contains('cooperative')) _selectedRole = UserRole.admin;
+            else _selectedRole = UserRole.customer;
+          }
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${_authMode == AuthMode.signIn ? "Logged in" : "Registered"} successfully as ${_selectedRole.displayName}'),

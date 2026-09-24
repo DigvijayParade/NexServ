@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../core/state/app_state.dart';
 import '../widgets/booking_bottom_sheet.dart';
 import '../../profile/screens/edit_profile_screen.dart';
+import '../../history/screens/job_history_screen.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'live_tracking_screen.dart';
@@ -18,6 +19,7 @@ class CustomerHomeScreen extends StatefulWidget {
 }
 
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
+  int _selectedIndex = 0;
   String _userName = 'Loading...';
 
   @override
@@ -218,8 +220,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildHomeTab(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -228,14 +229,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.history, color: Colors.white),
-            onPressed: () => Navigator.pushNamed(context, '/history'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.person, color: Colors.white),
-            onPressed: () => Navigator.pushNamed(context, '/profile'),
-          ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
@@ -366,6 +359,32 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Widget> pages = [
+      _buildHomeTab(context),
+      JobHistoryScreen(),
+      EditProfileScreen(),
+    ];
+
+    return Scaffold(
+      body: pages[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.black,
+        selectedItemColor: Colors.tealAccent,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Bookings'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );
